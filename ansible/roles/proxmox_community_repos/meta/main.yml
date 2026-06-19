@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  role_name: proxmox_community_repos
+  author: murrou
+  description: Configure Proxmox VE to use community (no-subscription) package repositories
+  min_ansible_version: "2.10"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+
+dependencies: []

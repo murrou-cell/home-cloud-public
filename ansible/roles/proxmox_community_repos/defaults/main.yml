@@ -1,0 +1,4 @@
+---
+pve_debian_suite: trixie
+pve_enable_ceph_no_sub: false
+pve_suppress_nag: true
