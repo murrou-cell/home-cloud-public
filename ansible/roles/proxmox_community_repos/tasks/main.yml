@@ -51,11 +51,14 @@
   ansible.builtin.apt:
     update_cache: true
 
-# Replaces the Ext.Msg.show call that fires the nag popup with void() — a no-op.
-# The regex won't match after patching so this task is idempotent.
-- name: Suppress PVE subscription nag popup
+# Patches the subscription condition to always be false so the else branch (orig_cmd) always runs.
+# Avoids the void() anti-pattern that suppressed the dialog but also silently dropped orig_cmd().
+# Single-line match; idempotent because the patched line won't re-match.
+- name: Suppress PVE subscription nag and restore orig_cmd execution
   ansible.builtin.replace:
     path: /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
-    regexp: "Ext\\.Msg\\.show\\(\\{\\s*title:\\s*gettext\\('No valid subscription'\\)"
-    replace: "void({title: gettext('No valid subscription')"
+    regexp: "res\\.data\\.status\\.toLowerCase\\(\\) !== 'active'"
+    replace: "false"
+    backup: true
   when: pve_suppress_nag | bool
+  notify: Restart pveproxy
