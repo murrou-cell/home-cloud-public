@@ -1,0 +1,18 @@
+---
+- name: Bootstrap k3s control plane
+  hosts: k3s_master
+  become: true
+  roles:
+    - k3s_master
+
+- name: Bootstrap k3s workers
+  hosts: k3s_workers
+  become: true
+  roles:
+    - k3s_worker
+
+- name: Configure local kubectl access and install k9s
+  hosts: k3s_master
+  become: true
+  roles:
+    - k9s

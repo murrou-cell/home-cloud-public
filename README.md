@@ -1,62 +1,124 @@
-# home-cloud — Part 1: Proxmox Configuration with Ansible
+# home-cloud — Project Forge
 
-This repository contains the Ansible automation used to configure a bare-metal Proxmox VE host as the foundation of a home cloud platform.
+A production-grade internal cloud platform built on a single consumer desktop, documented layer by layer as a LinkedIn blog series.
 
-Part of a series building a production-inspired platform engineering environment on a single-node homelab.
+**Hardware:** AMD Ryzen 3 3100 · 24 GB RAM · AMD RX 580 · 1 TB NVMe · Proxmox VE 9
 
-## What this does
+## Stack (in build order)
 
-- Switches Proxmox from the enterprise (paid) repositories to the community no-subscription repositories
-- Suppresses the subscription nag popup in the Proxmox web UI
-- Keeps the system up to date via a dedicated upgrade playbook
+| Part | Layer | Tag |
+|------|-------|-----|
+| 1 — Proxmox + Ansible | Bare-metal hypervisor config | `v0.1.0-proxmox-setup` |
+| 2 — Terraform | VM provisioning via `bpg/proxmox` | `v0.2.0-terraform-vms` |
+| 3 — Ansible + k3s | Kubernetes bootstrap + local tooling | `v0.3.0-k3s-bootstrap` |
+| 4 — Argo CD | GitOps delivery layer | coming soon |
+| 5 — Atlantis | Self-service Terraform via GitOps | coming soon |
 
-## Stack
+## Principles
 
-- **Proxmox VE 9** (Debian Trixie)
-- **Ansible**
+- **IaC-first** — every change is codified, nothing manual
+- **Git as single source of truth** — no state that lives only on the machine
+- **GitOps** — declarative desired state, reconciled automatically
+- **Reproducible from scratch** — every step runs cleanly on a fresh Proxmox install
 
-## Structure
+---
 
-```
-ansible/
-├── ansible.cfg                          # roles_path and default inventory
-├── inventory/
-│   └── hosts.yml.example                # inventory template
-├── playbooks/
-│   ├── proxmox-setup.yml                # configure Proxmox repositories + nag fix
-│   └── system-upgrade.yml               # apt update + full-upgrade
-└── roles/
-    └── proxmox_community_repos/         # role: switch to community repos
-        ├── defaults/main.yml
-        ├── handlers/main.yml
-        ├── meta/main.yml
-        └── tasks/main.yml
-```
+## Part 1 — Proxmox Configuration
 
-## Usage
+Switches Proxmox from enterprise (paid) repos to community no-subscription repos. Suppresses the subscription nag. Keeps the host up to date.
 
 ```bash
-cp ansible/inventory/hosts.yml.example ansible/inventory/hosts.yml
-# edit hosts.yml with your Proxmox host IP and credentials
-
 cd ansible
 ansible-playbook playbooks/proxmox-setup.yml
 ansible-playbook playbooks/system-upgrade.yml
 ```
 
-## Role variables
+**Roles:** `proxmox_community_repos`
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `pve_debian_suite` | `trixie` | Debian suite name matching your PVE version |
-| `pve_enable_ceph_no_sub` | `false` | Also configure Ceph community repo |
-| `pve_suppress_nag` | `true` | Patch the subscription nag popup |
+---
 
-## Series
+## Part 2 — Terraform VM Provisioning
 
-| Part | Topic | Repo |
-|------|-------|------|
-| 1 — Proxmox + Ansible | Configure bare-metal PVE host | this repo |
-| 2 — Terraform | Provision VMs declaratively | coming soon |
-| 3 — Ansible + k3s | Bootstrap Kubernetes | coming soon |
-| 4 — Argo CD | GitOps layer | coming soon |
+Creates a cloud-init ready Ubuntu 24.04 LTS template (VM 9000) with `qemu-guest-agent` baked in via `virt-customize`. Provisions two VMs from that template using the `bpg/proxmox` Terraform provider.
+
+| VM | ID | Cores | RAM | Disk |
+|----|----|-------|-----|------|
+| k3s-master | 100 | 2 | 4 GB | 20 GB |
+| k3s-worker | 101 | 4 | 12 GB | 50 GB |
+
+```bash
+# Create Terraform service account + generate tfvars
+cd ansible
+ansible-playbook playbooks/proxmox-terraform-auth.yml
+
+# Create VM template
+ansible-playbook playbooks/proxmox-template.yml
+
+# Provision VMs
+cd ../terraform/proxmox
+terraform init && terraform apply
+```
+
+**Roles:** `proxmox_terraform_auth`, `proxmox_vm_template`
+
+---
+
+## Part 3 — k3s Bootstrap
+
+Bootstraps a k3s cluster across the two provisioned VMs. Installs k9s locally and wires up `~/.kube/config` so kubectl and k9s work from the developer machine without SSH.
+
+```bash
+cd ansible
+ansible-playbook playbooks/k3s-bootstrap.yml
+```
+
+**What it does:**
+
+- `k3s_master` — installs k3s server with `--disable traefik`, waits for Ready, reads the node token
+- `k3s_worker` — installs k3s agent, joins the master using the token from hostvars
+- `k9s` — fetches kubeconfig from the master, rewrites the server address from `127.0.0.1` to the real IP, writes to `~/.kube/config`, installs k9s binary to `~/.local/bin`
+
+**Roles:** `k3s_master`, `k3s_worker`, `k9s`
+
+---
+
+## Repo structure
+
+```
+ansible/
+├── ansible.cfg
+├── inventory/
+│   └── hosts.yml.example
+├── playbooks/
+│   ├── proxmox-setup.yml
+│   ├── proxmox-terraform-auth.yml
+│   ├── proxmox-template.yml
+│   ├── system-upgrade.yml
+│   └── k3s-bootstrap.yml
+└── roles/
+    ├── proxmox_community_repos/
+    ├── proxmox_terraform_auth/
+    ├── proxmox_vm_template/
+    ├── k3s_master/
+    ├── k3s_worker/
+    └── k9s/
+
+terraform/
+└── proxmox/
+    ├── main.tf
+    ├── variables.tf
+    ├── outputs.tf
+    └── terraform.tfvars.example
+```
+
+## Prerequisites
+
+- Proxmox VE 9 installed and reachable over SSH
+- Ansible (`pip install ansible`)
+- Terraform >= 1.6
+- SSH key at `~/.ssh/id_ed25519` (injected into VMs via cloud-init)
+
+```bash
+cp ansible/inventory/hosts.yml.example ansible/inventory/hosts.yml
+# fill in your Proxmox IP and VM IPs
+```

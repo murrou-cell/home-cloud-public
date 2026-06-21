@@ -1,0 +1,48 @@
+---
+- name: Read kubeconfig from k3s master
+  ansible.builtin.slurp:
+    src: /etc/rancher/k3s/k3s.yaml
+  register: kubeconfig_raw
+
+- name: Ensure local .kube directory exists
+  ansible.builtin.file:
+    path: "{{ lookup('env', 'HOME') }}/.kube"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+
+- name: Write kubeconfig locally with correct server address
+  ansible.builtin.copy:
+    content: "{{ kubeconfig_raw.content | b64decode | replace('127.0.0.1', ansible_host) }}"
+    dest: "{{ lookup('env', 'HOME') }}/.kube/config"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+
+- name: Ensure local ~/.local/bin exists
+  ansible.builtin.file:
+    path: "{{ lookup('env', 'HOME') }}/.local/bin"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+
+- name: Download k9s archive locally (latest)
+  ansible.builtin.get_url:
+    url: https://github.com/derailed/k9s/releases/latest/download/k9s_Linux_amd64.tar.gz
+    dest: /tmp/k9s.tar.gz
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+
+- name: Install k9s binary locally
+  ansible.builtin.unarchive:
+    src: /tmp/k9s.tar.gz
+    dest: "{{ lookup('env', 'HOME') }}/.local/bin"
+    include:
+      - k9s
+    remote_src: true
+    creates: "{{ lookup('env', 'HOME') }}/.local/bin/k9s"
+  delegate_to: localhost
+  become: false
