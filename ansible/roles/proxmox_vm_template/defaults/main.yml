@@ -1,0 +1,6 @@
+---
+proxmox_template_id: 9000
+proxmox_template_name: ubuntu-2404-cloud
+proxmox_template_storage: local-lvm
+proxmox_template_image_url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+proxmox_template_image_path: /var/lib/vz/template/iso/noble-server-cloudimg-amd64.img

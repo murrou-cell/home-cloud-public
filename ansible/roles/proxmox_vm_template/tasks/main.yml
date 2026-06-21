@@ -1,0 +1,55 @@
+---
+- name: Check if template already exists
+  ansible.builtin.command: qm status {{ proxmox_template_id }}
+  register: template_check
+  failed_when: false
+  changed_when: false
+
+- name: Destroy existing template
+  ansible.builtin.command: qm destroy {{ proxmox_template_id }} --purge
+  when: template_check.rc == 0
+
+- name: Install virt-customize (libguestfs-tools)
+  ansible.builtin.apt:
+    name: libguestfs-tools
+    state: present
+
+- name: Download Ubuntu 24.04 cloud image
+  ansible.builtin.get_url:
+    url: "{{ proxmox_template_image_url }}"
+    dest: "{{ proxmox_template_image_path }}"
+    mode: "0644"
+
+- name: Inject qemu-guest-agent into cloud image
+  ansible.builtin.command: >
+    virt-customize -a {{ proxmox_template_image_path }}
+    --install qemu-guest-agent
+    --truncate /etc/machine-id
+
+- name: Create template VM
+  ansible.builtin.command: >
+    qm create {{ proxmox_template_id }}
+    --name {{ proxmox_template_name }}
+    --memory 2048
+    --cores 2
+    --net0 virtio,bridge=vmbr0
+    --serial0 socket
+    --vga serial0
+    --ostype l26
+    --agent enabled=1
+
+- name: Import cloud image as disk
+  ansible.builtin.command: >
+    qm importdisk {{ proxmox_template_id }}
+    {{ proxmox_template_image_path }}
+    {{ proxmox_template_storage }}
+
+- name: Attach disk, configure boot order, and add cloud-init drive
+  ansible.builtin.command: >
+    qm set {{ proxmox_template_id }}
+    --virtio0 {{ proxmox_template_storage }}:vm-{{ proxmox_template_id }}-disk-0,discard=on,iothread=1
+    --boot order=virtio0
+    --ide2 {{ proxmox_template_storage }}:cloudinit
+
+- name: Convert VM to template
+  ansible.builtin.command: qm template {{ proxmox_template_id }}

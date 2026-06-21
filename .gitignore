@@ -1,4 +1,23 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+*.tfvars.json
+.terraform.lock.hcl
+crash.log
+
 # Ansible
 *.retry
 ansible/inventory/hosts.ini
 ansible/inventory/hosts.yml
+
+# Secrets
+*.pem
+*.key
+*.env
+.env*
+secrets/
+
+# OS
+.DS_Store

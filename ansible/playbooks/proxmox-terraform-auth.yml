@@ -1,0 +1,6 @@
+---
+- name: Create Terraform service account and generate tfvars
+  hosts: proxmox_hosts
+  become: false
+  roles:
+    - proxmox_terraform_auth

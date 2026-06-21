@@ -1,0 +1,82 @@
+---
+- name: Get existing Proxmox users
+  ansible.builtin.command: pveum user list --output-format json
+  register: pveum_users
+  changed_when: false
+
+- name: Create terraform Proxmox user
+  ansible.builtin.command: pveum user add terraform@pve --comment "Terraform service account"
+  when: "'terraform@pve' not in pveum_users.stdout"
+
+- name: Get existing Proxmox roles
+  ansible.builtin.command: pveum role list --output-format json
+  register: pveum_roles
+  changed_when: false
+
+- name: Create TerraformRole
+  ansible.builtin.command: pveum role add TerraformRole
+  when: "'TerraformRole' not in pveum_roles.stdout"
+
+- name: Sync TerraformRole privileges
+  ansible.builtin.command: >
+    pveum role modify TerraformRole
+    -privs "VM.Allocate VM.Clone VM.Config.CDROM VM.Config.CPU VM.Config.Cloudinit
+    VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network
+    VM.Config.Options VM.Audit VM.PowerMgmt VM.GuestAgent.Audit
+    Datastore.AllocateSpace Datastore.Audit
+    SDN.Use Pool.Audit Sys.Audit"
+  changed_when: false
+
+- name: Assign TerraformRole to terraform user
+  ansible.builtin.command: pveum aclmod / -user terraform@pve -role TerraformRole
+  changed_when: false
+
+- name: Check if terraform.tfvars already exists
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../../terraform/proxmox/terraform.tfvars"
+  register: tfvars_stat
+  delegate_to: localhost
+
+- name: Delete existing API token so we can capture a fresh secret
+  ansible.builtin.command: pveum user token remove terraform@pve terraform
+  failed_when: false
+  changed_when: false
+  when: not tfvars_stat.stat.exists
+
+- name: Create API token
+  ansible.builtin.command: pveum user token add terraform@pve terraform --privsep=0 --output-format json
+  register: token_result
+  when: not tfvars_stat.stat.exists
+
+- name: Store token secret as fact
+  ansible.builtin.set_fact:
+    proxmox_tf_token_secret: "{{ (token_result.stdout | from_json).value }}"
+  when: not tfvars_stat.stat.exists
+
+- name: Print API token
+  ansible.builtin.debug:
+    msg: "API token: terraform@pve!terraform={{ proxmox_tf_token_secret }}"
+  when: not tfvars_stat.stat.exists
+
+- name: Verify SSH public key exists
+  ansible.builtin.stat:
+    path: "{{ ssh_public_key_path }}"
+  register: ssh_key_stat
+  delegate_to: localhost
+  when: not tfvars_stat.stat.exists
+
+- name: Fail if SSH public key not found
+  ansible.builtin.fail:
+    msg: >
+      SSH public key not found at {{ ssh_public_key_path }}.
+      Generate one with: ssh-keygen -t ed25519
+      Or override with: -e ssh_public_key_path=~/.ssh/id_rsa.pub
+  when: not tfvars_stat.stat.exists and not ssh_key_stat.stat.exists
+
+- name: Generate terraform.tfvars
+  ansible.builtin.template:
+    src: terraform.tfvars.j2
+    dest: "{{ playbook_dir }}/../../terraform/proxmox/terraform.tfvars"
+    mode: "0600"
+  delegate_to: localhost
+  when: not tfvars_stat.stat.exists

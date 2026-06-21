@@ -1,0 +1,13 @@
+# Copy this to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — never commit real secrets.
+
+proxmox_endpoint  = "https://192.168.1.X:8006/"
+proxmox_api_token = "terraform@pve!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+proxmox_node      = "pve"
+vm_template_id    = 9000
+
+# SSH public key injected into VMs — run: cat ~/.ssh/id_ed25519.pub
+ssh_public_key = "ssh-ed25519 AAAA... you@machine"
+
+# Optional: set a password for console access (useful if SSH fails during debugging)
+# vm_password = "changeme"
