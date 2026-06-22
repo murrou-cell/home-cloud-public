@@ -1,0 +1,223 @@
+---
+- name: Download Helm install script
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    dest: /tmp/get-helm-3.sh
+    mode: "0755"
+
+- name: Install Helm
+  ansible.builtin.command:
+    cmd: /tmp/get-helm-3.sh
+    creates: /usr/local/bin/helm
+
+- name: Add Argo CD Helm repository
+  ansible.builtin.command:
+    cmd: helm repo add argo https://argoproj.github.io/argo-helm
+  register: helm_repo_add
+  changed_when: "'has been added' in helm_repo_add.stdout"
+  failed_when: helm_repo_add.rc != 0 and 'already exists' not in helm_repo_add.stderr
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Update Helm repositories
+  ansible.builtin.command:
+    cmd: helm repo update
+  changed_when: false
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# Pre-create namespaces and bootstrap secrets so the bitwarden-vault PreSync
+# hook can mount the PVC and run on the very first Argo CD sync.
+- name: Create bitwarden-vault namespace
+  ansible.builtin.command:
+    cmd: k3s kubectl create namespace bitwarden-vault
+  register: result
+  changed_when: result.rc == 0
+  failed_when: result.rc != 0 and 'already exists' not in result.stderr
+
+- name: Create tailscale namespace
+  ansible.builtin.command:
+    cmd: k3s kubectl create namespace tailscale
+  register: result
+  changed_when: result.rc == 0
+  failed_when: result.rc != 0 and 'already exists' not in result.stderr
+
+- name: Write bitwarden-vault ServiceAccount manifest
+  ansible.builtin.copy:
+    dest: /tmp/bw-serviceaccount.yaml
+    mode: "0644"
+    content: |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: bitwarden-vault
+        namespace: bitwarden-vault
+        labels:
+          app.kubernetes.io/name: bitwarden-vault-sa
+          app.kubernetes.io/instance: bitwarden-vault
+
+- name: Create bitwarden-vault ServiceAccount
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /tmp/bw-serviceaccount.yaml
+  changed_when: false
+
+- name: Remove bitwarden-vault ServiceAccount manifest
+  ansible.builtin.file:
+    path: /tmp/bw-serviceaccount.yaml
+    state: absent
+
+- name: Write bitwarden-vault RBAC manifest
+  ansible.builtin.copy:
+    dest: /tmp/bw-rbac.yaml
+    mode: "0644"
+    content: |
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: bitwarden-secret-manager
+      rules:
+        - apiGroups: [""]
+          resources: ["secrets", "namespaces"]
+          verbs: ["get", "create", "update", "patch"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: bitwarden-secret-manager-binding
+      subjects:
+        - kind: ServiceAccount
+          name: bitwarden-vault
+          namespace: bitwarden-vault
+      roleRef:
+        kind: ClusterRole
+        name: bitwarden-secret-manager
+        apiGroup: rbac.authorization.k8s.io
+
+- name: Create bitwarden-vault ClusterRole and ClusterRoleBinding
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /tmp/bw-rbac.yaml
+  changed_when: false
+
+- name: Remove bitwarden-vault RBAC manifest
+  ansible.builtin.file:
+    path: /tmp/bw-rbac.yaml
+    state: absent
+
+- name: Create bw-credentials secret
+  ansible.builtin.shell: >-
+    k3s kubectl -n bitwarden-vault create secret generic bw-credentials
+    --from-literal=BW_CLIENTID={{ bitwarden_client_id | quote }}
+    --from-literal=BW_CLIENTSECRET={{ bitwarden_client_secret | quote }}
+    --from-literal=BW_PASSWORD={{ bitwarden_password | quote }}
+    --dry-run=client -o yaml | k3s kubectl apply -f -
+  changed_when: false
+  no_log: true
+
+- name: Write bitwarden-vault PVC manifest
+  ansible.builtin.copy:
+    dest: /tmp/bw-pvc.yaml
+    mode: "0644"
+    content: |
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: bitwarden-vault-pvc
+        namespace: bitwarden-vault
+        labels:
+          app.kubernetes.io/name: bitwarden-vault
+          app.kubernetes.io/instance: bitwarden-vault
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+
+- name: Create bitwarden-vault PVC
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /tmp/bw-pvc.yaml
+  changed_when: false
+
+- name: Remove bitwarden-vault PVC manifest
+  ansible.builtin.file:
+    path: /tmp/bw-pvc.yaml
+    state: absent
+
+- name: Install Argo CD via Helm
+  ansible.builtin.command:
+    cmd: >-
+      helm upgrade --install argocd argo/argo-cd
+      --namespace {{ argocd_namespace }}
+      --create-namespace
+      --version {{ argocd_chart_version }}
+      --wait
+  register: helm_install
+  changed_when: "'has been' in helm_install.stdout"
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for Argo CD server to be ready
+  ansible.builtin.command:
+    cmd: k3s kubectl rollout status deployment/argocd-server -n {{ argocd_namespace }} --timeout=300s
+  changed_when: false
+
+- name: Write argocd-application-controller cluster-admin binding manifest
+  ansible.builtin.copy:
+    dest: /tmp/argocd-admin-binding.yaml
+    mode: "0644"
+    content: |
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: argocd-application-controller-admin
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: cluster-admin
+      subjects:
+        - kind: ServiceAccount
+          name: argocd-application-controller
+          namespace: argocd
+
+- name: Grant argocd-application-controller cluster-admin
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /tmp/argocd-admin-binding.yaml
+  changed_when: false
+
+- name: Remove argocd-application-controller cluster-admin binding manifest
+  ansible.builtin.file:
+    path: /tmp/argocd-admin-binding.yaml
+    state: absent
+
+- name: Render Argo CD private repo credential
+  ansible.builtin.template:
+    src: repo-secret.yaml.j2
+    dest: /tmp/argocd-repo-secret.yaml
+    mode: "0600"
+  no_log: true
+
+- name: Apply Argo CD private repo credential
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /tmp/argocd-repo-secret.yaml
+  changed_when: false
+
+- name: Remove rendered repo credential file
+  ansible.builtin.file:
+    path: /tmp/argocd-repo-secret.yaml
+    state: absent
+
+- name: Copy root Application manifest to master
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../argocd/bootstrap/root-app.yaml"
+    dest: /tmp/root-app.yaml
+    mode: "0644"
+
+- name: Apply root Application to hand off to GitOps
+  ansible.builtin.command:
+    cmd: k3s kubectl apply -f /tmp/root-app.yaml
+  changed_when: false
+
+- name: Remove root Application manifest from master
+  ansible.builtin.file:
+    path: /tmp/root-app.yaml
+    state: absent

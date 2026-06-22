@@ -1,0 +1,6 @@
+chart: bitwarden-vault
+chartVersion: HEAD
+namespace: bitwarden-vault
+releaseName: bitwarden-vault
+repoUrl: https://github.com/murrou-cell/home-cloud
+syncWave: "-1"

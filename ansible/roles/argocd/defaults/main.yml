@@ -1,0 +1,13 @@
+---
+argocd_chart_version: "9.5.0"
+argocd_namespace: argocd
+
+# Private repo — set via ansible-vault or extra-vars, never commit real values
+private_repo_url: "https://github.com/murrou-cell/home-cloud"
+private_repo_username: "murrou-cell"
+private_repo_password: ""
+
+# Bitwarden API key + master password — set via ansible-vault or extra-vars
+bitwarden_client_id: ""
+bitwarden_client_secret: ""
+bitwarden_password: ""

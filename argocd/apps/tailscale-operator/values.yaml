@@ -1,0 +1,8 @@
+tailscale-operator:
+  # operator-oauth secret is managed by bitwarden-vault (sync wave -1).
+  # Omitting oauth.clientId/clientSecret here prevents helm from creating
+  # an empty secret that would clobber the bitwarden-synced credentials.
+  operatorConfig:
+    hostname: "home-cloud-operator"
+    defaultTags:
+      - "tag:k8s-operator"

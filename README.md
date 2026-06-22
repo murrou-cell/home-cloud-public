@@ -1,124 +1,51 @@
-# home-cloud — Project Forge
+# home-cloud
 
-A production-grade internal cloud platform built on a single consumer desktop, documented layer by layer as a LinkedIn blog series.
+Personal internal cloud platform — production-grade architecture on a single-node homelab.
 
-**Hardware:** AMD Ryzen 3 3100 · 24 GB RAM · AMD RX 580 · 1 TB NVMe · Proxmox VE 9
+## Architecture
 
-## Stack (in build order)
+| Layer | Technology | Status |
+|-------|-----------|--------|
+| 0 — Bare metal | Proxmox VE | Done |
+| 1 — Virtualization | Proxmox VMs | In progress |
+| 2 — IaC provisioning | Terraform (bpg/proxmox) | In progress |
+| 3 — Config management | Ansible | Planned |
+| 4 — Kubernetes | k3s | Planned |
+| 5 — GitOps | Argo CD | Planned |
+| 6 — Platform services | Prometheus · Grafana · n8n | Planned |
+| 7 — Local AI | Ollama · Open WebUI | Planned |
 
-| Part | Layer | Tag |
-|------|-------|-----|
-| 1 — Proxmox + Ansible | Bare-metal hypervisor config | `v0.1.0-proxmox-setup` |
-| 2 — Terraform | VM provisioning via `bpg/proxmox` | `v0.2.0-terraform-vms` |
-| 3 — Ansible + k3s | Kubernetes bootstrap + local tooling | `v0.3.0-k3s-bootstrap` |
-| 4 — Argo CD | GitOps delivery layer | coming soon |
-| 5 — Atlantis | Self-service Terraform via GitOps | coming soon |
+## Hardware
 
-## Principles
-
-- **IaC-first** — every change is codified, nothing manual
-- **Git as single source of truth** — no state that lives only on the machine
-- **GitOps** — declarative desired state, reconciled automatically
-- **Reproducible from scratch** — every step runs cleanly on a fresh Proxmox install
-
----
-
-## Part 1 — Proxmox Configuration
-
-Switches Proxmox from enterprise (paid) repos to community no-subscription repos. Suppresses the subscription nag. Keeps the host up to date.
-
-```bash
-cd ansible
-ansible-playbook playbooks/proxmox-setup.yml
-ansible-playbook playbooks/system-upgrade.yml
-```
-
-**Roles:** `proxmox_community_repos`
-
----
-
-## Part 2 — Terraform VM Provisioning
-
-Creates a cloud-init ready Ubuntu 24.04 LTS template (VM 9000) with `qemu-guest-agent` baked in via `virt-customize`. Provisions two VMs from that template using the `bpg/proxmox` Terraform provider.
-
-| VM | ID | Cores | RAM | Disk |
-|----|----|-------|-----|------|
-| k3s-master | 100 | 2 | 4 GB | 20 GB |
-| k3s-worker | 101 | 4 | 12 GB | 50 GB |
-
-```bash
-# Create Terraform service account + generate tfvars
-cd ansible
-ansible-playbook playbooks/proxmox-terraform-auth.yml
-
-# Create VM template
-ansible-playbook playbooks/proxmox-template.yml
-
-# Provision VMs
-cd ../terraform/proxmox
-terraform init && terraform apply
-```
-
-**Roles:** `proxmox_terraform_auth`, `proxmox_vm_template`
-
----
-
-## Part 3 — k3s Bootstrap
-
-Bootstraps a k3s cluster across the two provisioned VMs. Installs k9s locally and wires up `~/.kube/config` so kubectl and k9s work from the developer machine without SSH.
-
-```bash
-cd ansible
-ansible-playbook playbooks/k3s-bootstrap.yml
-```
-
-**What it does:**
-
-- `k3s_master` — installs k3s server with `--disable traefik`, waits for Ready, reads the node token
-- `k3s_worker` — installs k3s agent, joins the master using the token from hostvars
-- `k9s` — fetches kubeconfig from the master, rewrites the server address from `127.0.0.1` to the real IP, writes to `~/.kube/config`, installs k9s binary to `~/.local/bin`
-
-**Roles:** `k3s_master`, `k3s_worker`, `k9s`
-
----
-
-## Repo structure
-
-```
-ansible/
-├── ansible.cfg
-├── inventory/
-│   └── hosts.yml.example
-├── playbooks/
-│   ├── proxmox-setup.yml
-│   ├── proxmox-terraform-auth.yml
-│   ├── proxmox-template.yml
-│   ├── system-upgrade.yml
-│   └── k3s-bootstrap.yml
-└── roles/
-    ├── proxmox_community_repos/
-    ├── proxmox_terraform_auth/
-    ├── proxmox_vm_template/
-    ├── k3s_master/
-    ├── k3s_worker/
-    └── k9s/
-
-terraform/
-└── proxmox/
-    ├── main.tf
-    ├── variables.tf
-    ├── outputs.tf
-    └── terraform.tfvars.example
-```
+- CPU: AMD Ryzen 3 3100 (4c/8t)
+- RAM: 24 GB
+- GPU: AMD Radeon RX 580 4 GB (local LLM inference)
+- Storage: 1 TB NVMe SSD
 
 ## Prerequisites
 
-- Proxmox VE 9 installed and reachable over SSH
-- Ansible (`pip install ansible`)
-- Terraform >= 1.6
-- SSH key at `~/.ssh/id_ed25519` (injected into VMs via cloud-init)
+Before running Terraform you need:
+
+1. **A cloud-init–ready VM template** on your Proxmox node — see `docs/proxmox-template.md`
+2. **A Proxmox API token** with appropriate permissions — see `docs/proxmox-api-token.md`
+3. **Terraform ≥ 1.6** installed locally
+
+## Getting started
 
 ```bash
-cp ansible/inventory/hosts.yml.example ansible/inventory/hosts.yml
-# fill in your Proxmox IP and VM IPs
+cd terraform/proxmox
+cp terraform.tfvars.example terraform.tfvars
+# edit terraform.tfvars with your values
+terraform init
+terraform plan
+terraform apply
+```
+
+## Repository layout
+
+```
+terraform/    # VM provisioning (Layer 2)
+ansible/      # OS bootstrap + k3s install (Layer 3)
+kubernetes/   # k3s manifests + ArgoCD apps (Layers 4-6)
+docs/         # Setup guides and architecture notes
 ```

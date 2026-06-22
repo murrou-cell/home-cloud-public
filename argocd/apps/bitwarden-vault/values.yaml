@@ -1,0 +1,10 @@
+schedule: "0 * * * *"
+
+image:
+  repository: ghcr.io/murrou-cell/bitwarden-vault
+  tag: main
+  pullPolicy: Always
+
+persistence:
+  size: 1Gi
+  storageClass: ""

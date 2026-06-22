@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bitwarden-vault
+  labels:
+    app.kubernetes.io/name: bitwarden-vault-cj
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  schedule: "{{ .Values.schedule }}"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: bitwarden-vault
+          restartPolicy: OnFailure
+          containers:
+            - name: bitwarden-sync
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              envFrom:
+                - secretRef:
+                    name: bw-credentials
+              volumeMounts:
+                - name: bw-data
+                  mountPath: "/root/.config/Bitwarden CLI/"
+          volumes:
+            - name: bw-data
+              persistentVolumeClaim:
+                claimName: bitwarden-vault-pvc

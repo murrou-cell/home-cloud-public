@@ -2,10 +2,13 @@
 **/.terraform/
 *.tfstate
 *.tfstate.backup
+*.tfstate.*.backup
 *.tfvars
 *.tfvars.json
 .terraform.lock.hcl
 crash.log
+override.tf
+override.tf.json
 
 # Ansible
 *.retry
@@ -18,6 +21,10 @@ ansible/inventory/hosts.yml
 *.env
 .env*
 secrets/
+
+# Helm vendored dependencies (Argo CD downloads these at sync time)
+argocd/helm/*/charts/
+argocd/helm/*/Chart.lock
 
 # OS
 .DS_Store

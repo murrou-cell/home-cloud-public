@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: local-apps
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/murrou-cell/home-cloud
+        revision: HEAD
+        files:
+          - path: argocd/apps/*/config.yaml
+  template:
+    metadata:
+      name: "{{releaseName}}"
+      annotations:
+        argocd.argoproj.io/sync-wave: "{{syncWave}}"
+    spec:
+      project: default
+      destination:
+        namespace: "{{namespace}}"
+        server: https://kubernetes.default.svc
+      source:
+        repoURL: "{{repoUrl}}"
+        targetRevision: "{{chartVersion}}"
+        path: "argocd/apps/{{releaseName}}"
+        helm:
+          valueFiles:
+            - values.yaml
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true

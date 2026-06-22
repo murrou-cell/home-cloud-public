@@ -1,0 +1,6 @@
+---
+- name: Bootstrap Argo CD (one-time)
+  hosts: k3s_master
+  become: true
+  roles:
+    - argocd
