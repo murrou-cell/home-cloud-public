@@ -1,0 +1,21 @@
+# Copy this to backend.tf and fill in your MinIO endpoint.
+# Credentials are injected at runtime via AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+# environment variables — never put them in this file.
+
+terraform {
+  backend "s3" {
+    bucket = "terraform-state"
+    key    = "proxmox/terraform.tfstate"
+    region = "us-east-1"
+
+    endpoints = {
+      s3 = "https://your-minio-endpoint"
+    }
+
+    use_path_style              = true
+    skip_credentials_validation = true
+    skip_metadata_api_check     = true
+    skip_region_validation      = true
+    skip_requesting_account_id  = true
+  }
+}

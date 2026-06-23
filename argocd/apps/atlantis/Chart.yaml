@@ -1,0 +1,8 @@
+apiVersion: v2
+name: atlantis
+version: 1.0.0
+
+dependencies:
+  - name: atlantis
+    version: 6.6.0
+    repository: https://runatlantis.github.io/helm-charts

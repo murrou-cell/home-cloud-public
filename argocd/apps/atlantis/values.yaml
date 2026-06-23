@@ -1,0 +1,57 @@
+atlantis:
+  atlantisUrl: https://atlantis.your-tailnet.ts.net
+
+  orgAllowlist: github.com/murrou-cell/home-cloud
+
+  hidePrevPlanComments: true
+
+  service:
+    type: ClusterIP
+
+  # Disable built-in ingress — custom Tailscale Funnel ingress in templates/
+  ingress:
+    enabled: false
+
+  volumeClaim:
+    enabled: true
+    dataStorage: 5Gi
+    storageClassName: ""
+
+  # Secrets from bitwarden-vault (synced before each ArgoCD sync via PreSync hook)
+  environmentSecrets:
+    - name: ATLANTIS_GH_TOKEN
+      secretKeyRef:
+        name: atlantis-secrets
+        key: github-token
+    - name: ATLANTIS_GH_WEBHOOK_SECRET
+      secretKeyRef:
+        name: atlantis-secrets
+        key: webhook-secret
+    - name: TF_VAR_proxmox_api_token
+      secretKeyRef:
+        name: atlantis-secrets
+        key: proxmox-api-token
+    - name: AWS_ACCESS_KEY_ID
+      secretKeyRef:
+        name: atlantis-secrets
+        key: minio-access-key
+    - name: AWS_SECRET_ACCESS_KEY
+      secretKeyRef:
+        name: atlantis-secrets
+        key: minio-secret-key
+
+  # Non-sensitive config injected from bitwarden-vault-managed secret.
+  # Bitwarden item: bitwarden-vault/atlantis/atlantis-tf-vars
+  # Keys must be valid env var names so loadEnvFromSecrets injects them directly.
+  loadEnvFromSecrets:
+    - atlantis-tf-vars
+
+  nodeSelector:
+    kubernetes.io/hostname: k3s-atlantis
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

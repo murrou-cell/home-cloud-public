@@ -16,6 +16,14 @@ locals {
       disk_size   = 50
       ip_address  = "dhcp"
     }
+    k3s-atlantis = {
+      vm_id       = 102
+      description = "Dedicated Atlantis runner — isolated from k3s workload nodes so Terraform can modify k3s-master and k3s-worker without disrupting the runner"
+      cores       = 1
+      memory_mb   = 2048
+      disk_size   = 20
+      ip_address  = "dhcp"
+    }
   }
 }
 
@@ -39,6 +47,7 @@ resource "proxmox_virtual_environment_vm" "vms" {
 
   memory {
     dedicated = each.value.memory_mb
+    floating  = each.value.memory_mb
   }
 
   disk {
