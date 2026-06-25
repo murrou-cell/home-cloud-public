@@ -1,28 +1,31 @@
 locals {
   vms = {
     k3s-master = {
-      vm_id       = 100
-      description = "k3s control plane"
-      cores       = 2
-      memory_mb   = 4096
-      disk_size   = 20
-      ip_address  = "dhcp"
+      vm_id             = 100
+      description       = "k3s control plane"
+      cores             = 2
+      memory_mb         = 4096
+      disk_size         = 20
+      ip_address        = "dhcp"
+      bootstrap_ansible = false
     }
     k3s-worker = {
-      vm_id       = 101
-      description = "k3s worker — runs all workloads (ArgoCD, Prometheus, Grafana, Ollama)"
-      cores       = 4
-      memory_mb   = 12288
-      disk_size   = 50
-      ip_address  = "dhcp"
+      vm_id             = 101
+      description       = "k3s worker — runs all workloads (ArgoCD, Prometheus, Grafana, Ollama)"
+      cores             = 4
+      memory_mb         = 12288
+      disk_size         = 50
+      ip_address        = "dhcp"
+      bootstrap_ansible = false
     }
     k3s-atlantis = {
-      vm_id       = 102
-      description = "Dedicated Atlantis runner — isolated from k3s workload nodes so Terraform can modify k3s-master and k3s-worker without disrupting the runner"
-      cores       = 1
-      memory_mb   = 2048
-      disk_size   = 20
-      ip_address  = "dhcp"
+      vm_id             = 102
+      description       = "Dedicated Atlantis runner — isolated from k3s workload nodes so Terraform can modify k3s-master and k3s-worker without disrupting the runner"
+      cores             = 1
+      memory_mb         = 2048
+      disk_size         = 20
+      ip_address        = "dhcp"
+      bootstrap_ansible = false
     }
   }
 }

@@ -1,0 +1,38 @@
+argo-workflows:
+  crds:
+    install: true
+    keep: true
+
+  workflow:
+    serviceAccount:
+      create: true
+      name: argo-workflow
+    rbac:
+      create: true
+
+  controller:
+    workflowNamespaces:
+      - argo-workflows
+    nodeSelector:
+      kubernetes.io/hostname: k3s-worker
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+
+  server:
+    authModes:
+      - client
+    # Disable built-in ingress — custom Tailscale ingress in templates/
+    ingress:
+      enabled: false
+    nodeSelector:
+      kubernetes.io/hostname: k3s-worker
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi

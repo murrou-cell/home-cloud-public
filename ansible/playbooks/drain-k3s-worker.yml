@@ -1,0 +1,14 @@
+---
+- name: Drain and remove k3s worker from cluster
+  hosts: k3s_master
+  become: true
+  tasks:
+  - name: Drain node
+    ansible.builtin.command:
+      cmd: "k3s kubectl drain {{ node_name }} --ignore-daemonsets --delete-emptydir-data --force --timeout=60s"
+    ignore_errors: true
+
+  - name: Delete node from cluster
+    ansible.builtin.command:
+      cmd: "k3s kubectl delete node {{ node_name }}"
+    ignore_errors: true

@@ -1,0 +1,6 @@
+chart: argo-workflows
+chartVersion: HEAD
+namespace: argo-workflows
+releaseName: argo-workflows
+repoUrl: https://github.com/murrou-cell/home-cloud
+syncWave: "0"

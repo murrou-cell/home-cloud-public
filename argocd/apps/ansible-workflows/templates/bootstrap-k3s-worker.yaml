@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: bootstrap-k3s-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  entrypoint: bootstrap
+  serviceAccountName: argo-workflow
+  ttlStrategy:
+    secondsAfterCompletion: 86400
+  arguments:
+    parameters:
+    - name: host_ip
+      value: ""
+    - name: k3s_master_ip
+      value: {{ .Values.k3sMasterIp | quote }}
+  templates:
+  - name: bootstrap
+    inputs:
+      parameters:
+      - name: host_ip
+      - name: k3s_master_ip
+      artifacts:
+      - name: repo
+        path: /workspace/repo
+        git:
+          repo: https://github.com/murrou-cell/home-cloud
+          revision: main
+          usernameSecret:
+            name: github-credentials
+            key: username
+          passwordSecret:
+            name: github-credentials
+            key: token
+    container:
+      image: cytopia/ansible:latest-tools
+      command: [sh, /workspace/repo/ansible/scripts/bootstrap-k3s-worker.sh]
+      env:
+      - name: HOST_IP
+        value: "{{ "{{inputs.parameters.host_ip}}" }}"
+      - name: K3S_MASTER_IP
+        value: "{{ "{{inputs.parameters.k3s_master_ip}}" }}"
+      volumeMounts:
+      - name: ssh-key
+        mountPath: /ssh
+        readOnly: true
+    volumes:
+    - name: ssh-key
+      secret:
+        secretName: {{ .Values.ansibleSshKeySecret | quote }}
+        defaultMode: 0400

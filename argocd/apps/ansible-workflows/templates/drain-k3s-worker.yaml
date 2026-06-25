@@ -1,0 +1,53 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: drain-k3s-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  entrypoint: drain
+  serviceAccountName: argo-workflow
+  ttlStrategy:
+    secondsAfterCompletion: 86400
+  arguments:
+    parameters:
+    - name: node_name
+      value: ""
+    - name: k3s_master_ip
+      value: {{ .Values.k3sMasterIp | quote }}
+  templates:
+  - name: drain
+    inputs:
+      parameters:
+      - name: node_name
+      - name: k3s_master_ip
+      artifacts:
+      - name: repo
+        path: /workspace/repo
+        git:
+          repo: https://github.com/murrou-cell/home-cloud
+          revision: main
+          usernameSecret:
+            name: github-credentials
+            key: username
+          passwordSecret:
+            name: github-credentials
+            key: token
+    nodeSelector:
+      kubernetes.io/hostname: k3s-worker
+    container:
+      image: cytopia/ansible:latest-tools
+      command: [sh, /workspace/repo/ansible/scripts/drain-k3s-worker.sh]
+      env:
+      - name: NODE_NAME
+        value: "{{ "{{inputs.parameters.node_name}}" }}"
+      - name: K3S_MASTER_IP
+        value: "{{ "{{inputs.parameters.k3s_master_ip}}" }}"
+      volumeMounts:
+      - name: ssh-key
+        mountPath: /ssh
+        readOnly: true
+    volumes:
+    - name: ssh-key
+      secret:
+        secretName: {{ .Values.ansibleSshKeySecret | quote }}
+        defaultMode: 0400

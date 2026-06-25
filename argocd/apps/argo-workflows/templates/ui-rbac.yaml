@@ -1,0 +1,32 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-workflow-ui
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups: [argoproj.io]
+  resources: [workflows]
+  verbs: [get, list, watch, update, delete]
+- apiGroups: [argoproj.io]
+  resources: [workflowtemplates, cronworkflows, workflowevents]
+  verbs: [get, list, watch]
+- apiGroups: [""]
+  resources: [pods, pods/log, events]
+  verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-workflow-ui
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-workflow-ui
+subjects:
+- kind: ServiceAccount
+  name: argo-workflow
+  namespace: {{ .Release.Namespace }}
+- kind: ServiceAccount
+  name: argo-workflows-server
+  namespace: {{ .Release.Namespace }}

@@ -1,0 +1,2 @@
+k3sMasterIp: "192.168.0.X"
+ansibleSshKeySecret: "ansible-ssh-key"
