@@ -1,5 +1,5 @@
 atlantis:
-  atlantisUrl: https://atlantis.your-tailnet-name.ts.net
+  atlantisUrl: https://atlantis.your-tailnet.ts.net
 
   orgAllowlist: github.com/murrou-cell/home-cloud
 
@@ -23,10 +23,6 @@ atlantis:
       secretKeyRef:
         name: atlantis-secrets
         key: github-token
-    - name: ARGO_TOKEN
-      secretKeyRef:
-        name: atlantis-secrets
-        key: argo-token
     - name: ATLANTIS_GH_WEBHOOK_SECRET
       secretKeyRef:
         name: atlantis-secrets
@@ -51,7 +47,7 @@ atlantis:
     - atlantis-tf-vars
 
   nodeSelector:
-    kubernetes.io/hostname: k3s-atlantis
+    kubernetes.io/hostname: k3s-ops
 
   resources:
     requests:

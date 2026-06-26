@@ -1,13 +1,49 @@
 argo-cd:
   configs:
     params:
-      server.insecure: "true"
+      server.insecure: "false"
+    cm:
+      url: https://argo-cd.your-tailnet.ts.net
+      admin.enabled: "false"
+      dex.config: |
+        connectors:
+        - type: github
+          id: github
+          name: GitHub
+          config:
+            clientID: $dex.github.clientId
+            clientSecret: $dex.github.clientSecret
+            loadAllGroups: false
+        staticClients:
+        - id: argo-workflows
+          name: Argo Workflows
+          secret: $dex.workflows.clientSecret
+          redirectURIs:
+          - https://argo-workflows.your-tailnet.ts.net/oauth2/callback
+        - id: atlantis-oauth2-proxy
+          name: Atlantis
+          secret: $dex.atlantis.clientSecret
+          redirectURIs:
+          - https://atlantis.your-tailnet.ts.net/oauth2/callback
+    rbac:
+      policy.default: role:readonly
+      policy.csv: |
+        g, your-github-email@example.com, role:admin
+      scopes: "[groups, email]"
 
   crds:
     install: true
 
   dex:
-    enabled: false
+    enabled: true
+    nodeSelector:
+      kubernetes.io/hostname: k3s-worker
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 64Mi
 
   notifications:
     enabled: false

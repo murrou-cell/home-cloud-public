@@ -17,7 +17,10 @@ all:
         k3s-worker:
           ansible_host: 192.168.1.X
           ansible_user: ubuntu
-        k3s-atlantis:
+        k3s-worker-2:
+          ansible_host: 192.168.1.X
+          ansible_user: ubuntu
+        k3s-ops:
           ansible_host: 192.168.1.X
           ansible_user: ubuntu
 

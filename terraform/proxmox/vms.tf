@@ -13,19 +13,28 @@ locals {
       vm_id             = 101
       description       = "k3s worker — runs all workloads (ArgoCD, Prometheus, Grafana, Ollama)"
       cores             = 4
-      memory_mb         = 12288
+      memory_mb         = 8192
       disk_size         = 50
       ip_address        = "dhcp"
       bootstrap_ansible = false
     }
-    k3s-atlantis = {
+    k3s-worker-2 = {
       vm_id             = 102
-      description       = "Dedicated Atlantis runner — isolated from k3s workload nodes so Terraform can modify k3s-master and k3s-worker without disrupting the runner"
-      cores             = 1
-      memory_mb         = 2048
+      description       = "k3s second worker — additional compute capacity"
+      cores             = 2
+      memory_mb         = 4096
+      disk_size         = 30
+      ip_address        = "dhcp"
+      bootstrap_ansible = true
+    }
+    k3s-ops = {
+      vm_id             = 104
+      description       = "Dedicated ops node — runs Atlantis and Argo Workflows isolated from application workloads"
+      cores             = 2
+      memory_mb         = 5120
       disk_size         = 20
       ip_address        = "dhcp"
-      bootstrap_ansible = false
+      bootstrap_ansible = true
     }
   }
 }

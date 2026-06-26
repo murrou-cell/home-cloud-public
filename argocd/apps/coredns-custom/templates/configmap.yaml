@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  # Rewrites the Tailscale hostname to the internal argocd-server service so
+  # Argo Workflows can reach Dex's token endpoint from inside the cluster.
+  # k3s CoreDNS imports *.override files inside the .:53 server block.
+  argo-cd-tailscale.override: |
+    rewrite name argo-cd.your-tailnet.ts.net argocd-server.argocd.svc.cluster.local

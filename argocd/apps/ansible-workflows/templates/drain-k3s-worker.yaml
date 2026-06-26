@@ -33,7 +33,7 @@ spec:
             name: github-credentials
             key: token
     nodeSelector:
-      kubernetes.io/hostname: k3s-worker
+      kubernetes.io/hostname: k3s-ops
     container:
       image: cytopia/ansible:latest-tools
       command: [sh, /workspace/repo/ansible/scripts/drain-k3s-worker.sh]

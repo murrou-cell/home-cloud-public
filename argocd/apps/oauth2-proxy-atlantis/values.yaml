@@ -1,0 +1,35 @@
+oauth2-proxy:
+  fullnameOverride: oauth2-proxy-atlantis
+
+  config:
+    # client-id injected via templates/secret.yaml (bitwarden can't create hyphenated keys).
+    # client-secret and cookie-secret are managed by bitwarden-vault in the same secret.
+    existingSecret: oauth2-proxy-atlantis-secret
+
+  extraArgs:
+    provider: oidc
+    # Same issuer/alias pattern as Argo Workflows: discover via internal HTTP,
+    # skip issuer mismatch check (Dex stamps the external Tailscale URL in the doc).
+    # Token exchange posts to the external URL → CoreDNS rewrite → argocd-server:443.
+    oidc-issuer-url: "http://argocd-server.argocd.svc.cluster.local/api/dex"
+    insecure-oidc-skip-issuer-verification: "true"
+    ssl-insecure-skip-verify: "true"
+    upstream: "http://atlantis:80"
+    redirect-url: "https://atlantis.your-tailnet.ts.net/oauth2/callback"
+    email-domain: "*"
+    # GitHub webhooks POST to /events — bypass auth so they still reach Atlantis
+    skip-auth-route: "^/events$"
+
+  # Disable built-in ingress — custom Tailscale Funnel ingress in templates/
+  ingress:
+    enabled: false
+
+  nodeSelector:
+    kubernetes.io/hostname: k3s-ops
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi

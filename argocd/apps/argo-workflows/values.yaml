@@ -14,7 +14,7 @@ argo-workflows:
     workflowNamespaces:
       - argo-workflows
     nodeSelector:
-      kubernetes.io/hostname: k3s-worker
+      kubernetes.io/hostname: k3s-ops
     resources:
       requests:
         cpu: 50m
@@ -24,12 +24,35 @@ argo-workflows:
 
   server:
     authModes:
-      - client
+      - sso
+      - server
+    sso:
+      enabled: true
+      # Dex's issuer is the external Tailscale URL, which is not resolvable inside
+      # the cluster. issuer points at argocd-server internally for OIDC discovery.
+      # Token exchange still posts to the external URL from the discovery doc, but
+      # coredns-custom rewrites that hostname to argocd-server; insecureSkipVerify
+      # accepts the self-signed cert. issuerAlias accepts the external iss claim in JWTs.
+      issuer: http://argocd-server.argocd.svc.cluster.local/api/dex
+      issuerAlias: https://argo-cd.your-tailnet.ts.net/api/dex
+      clientId:
+        name: argo-workflows-sso
+        key: client-id
+      clientSecret:
+        name: argo-workflows-sso
+        key: client-secret
+      redirectUrl: https://argo-workflows.your-tailnet.ts.net/oauth2/callback
+      rbac:
+        enabled: true
+      insecureSkipVerify: true
+      scopes:
+        - profile
+        - email
     # Disable built-in ingress — custom Tailscale ingress in templates/
     ingress:
       enabled: false
     nodeSelector:
-      kubernetes.io/hostname: k3s-worker
+      kubernetes.io/hostname: k3s-ops
     resources:
       requests:
         cpu: 50m

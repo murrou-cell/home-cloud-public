@@ -1,0 +1,82 @@
+---
+# Kubernetes 1.24+ no longer auto-creates SA token Secrets. Argo Workflows SSO RBAC
+# looks up the token by the exact name "{sa}.service-account-token"; declare it explicitly.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argo-sso-viewer.service-account-token
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    kubernetes.io/service-account.name: argo-sso-viewer
+type: kubernetes.io/service-account-token
+---
+# All SSO-authenticated users land on this ServiceAccount (rbac-rule: "true", precedence 0).
+# read-only: they can view workflows and logs but cannot create, submit, or delete.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-sso-viewer
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    workflows.argoproj.io/rbac-rule: "true"
+    workflows.argoproj.io/rbac-rule-precedence: "0"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-sso-viewer
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [get, list, watch, delete]
+  - apiGroups: [argoproj.io]
+    resources: [workflowtemplates, cronworkflows, clusterworkflowtemplates]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods, pods/log, events]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-sso-viewer
+  namespace: {{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: argo-sso-viewer
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: argo-sso-viewer
+  apiGroup: rbac.authorization.k8s.io
+---
+# The Argo Workflows UI lists all these resources cluster-wide by default (no namespace filter).
+# A namespace Role cannot satisfy cluster-scoped list requests; a ClusterRole is required.
+# delete is intentionally absent here — only granted namespace-scoped in the Role above.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argo-sso-viewer-cluster
+rules:
+  - apiGroups: [argoproj.io]
+    resources:
+      - workflows
+      - workflowtemplates
+      - cronworkflows
+      - workfloweventbindings
+      - clusterworkflowtemplates
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-sso-viewer-cluster
+subjects:
+  - kind: ServiceAccount
+    name: argo-sso-viewer
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: argo-sso-viewer-cluster
+  apiGroup: rbac.authorization.k8s.io
