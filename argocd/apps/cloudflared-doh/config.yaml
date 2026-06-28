@@ -1,6 +1,6 @@
-chart: oauth2-proxy-atlantis
+chart: cloudflared-doh
 chartVersion: HEAD
-namespace: atlantis
-releaseName: oauth2-proxy-atlantis
+namespace: cloudflared-doh
+releaseName: cloudflared-doh
 repoUrl: https://github.com/murrou-cell/home-cloud-public
 syncWave: "0"

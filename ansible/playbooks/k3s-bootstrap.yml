@@ -11,6 +11,12 @@
   roles:
     - k3s_worker
 
+- name: Configure DNS node
+  hosts: k3s_dns
+  become: true
+  roles:
+    - dns_node
+
 - name: Configure local kubectl access and install k9s
   hosts: k3s_master
   become: true

@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared-doh
+  labels:
+    app: cloudflared-doh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflared-doh
+  template:
+    metadata:
+      labels:
+        app: cloudflared-doh
+    spec:
+      hostNetwork: {{ .Values.hostNetwork }}
+      dnsPolicy: Default
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      containers:
+        - name: cloudflared
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - proxy-dns
+            - --port
+            - "{{ .Values.dns.port }}"
+            - --address
+            - "0.0.0.0"
+{{- range .Values.dns.upstreams }}
+            - --upstream
+            - "{{ . }}"
+{{- end }}
+          securityContext:
+            capabilities:
+              add: ["NET_BIND_SERVICE"]
+            runAsUser: 0
+            runAsGroup: 0

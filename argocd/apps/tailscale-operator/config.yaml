@@ -2,5 +2,5 @@ chart: tailscale-operator
 chartVersion: HEAD
 namespace: tailscale
 releaseName: tailscale-operator
-repoUrl: https://github.com/murrou-cell/home-cloud
+repoUrl: https://github.com/murrou-cell/home-cloud-public
 syncWave: "0"

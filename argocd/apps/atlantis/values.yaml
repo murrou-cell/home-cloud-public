@@ -1,7 +1,7 @@
 atlantis:
   atlantisUrl: https://atlantis.your-tailnet.ts.net
 
-  orgAllowlist: github.com/murrou-cell/home-cloud
+  orgAllowlist: github.com/murrou-cell/home-cloud-public
 
   hidePrevPlanComments: true
 

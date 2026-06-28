@@ -26,6 +26,7 @@ locals {
       disk_size         = 30
       ip_address        = "dhcp"
       bootstrap_ansible = true
+      node_type         = "worker"
     }
     k3s-ops = {
       vm_id             = 104
@@ -35,6 +36,18 @@ locals {
       disk_size         = 20
       ip_address        = "dhcp"
       bootstrap_ansible = true
+      node_type         = "worker"
+    }
+    k3s-dns = {
+      vm_id             = 105
+      description       = "Dedicated DNS node — runs cloudflared-doh with hostNetwork on a pinned static IP"
+      cores             = 1
+      memory_mb         = 512
+      disk_size         = 10
+      ip_address        = "<YOUR_IP>/24"
+      gateway           = "<YOUR_GATEWAY_IP>"
+      bootstrap_ansible = true
+      node_type         = "dns"
     }
   }
 }
@@ -79,6 +92,7 @@ resource "proxmox_virtual_environment_vm" "vms" {
     ip_config {
       ipv4 {
         address = each.value.ip_address
+        gateway = try(each.value.gateway, null)
       }
     }
 

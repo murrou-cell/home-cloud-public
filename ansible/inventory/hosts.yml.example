@@ -24,7 +24,14 @@ all:
           ansible_host: 192.168.1.X
           ansible_user: ubuntu
 
+    k3s_dns:
+      hosts:
+        k3s-dns:
+          ansible_host: 192.168.1.X
+          ansible_user: ubuntu
+
     k3s:
       children:
         k3s_master:
         k3s_workers:
+        k3s_dns:

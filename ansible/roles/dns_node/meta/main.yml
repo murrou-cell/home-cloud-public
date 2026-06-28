@@ -1,0 +1,5 @@
+---
+galaxy_info:
+  role_name: dns_node
+  description: Configures a node to host cloudflared-doh — disables systemd-resolved stub so the pod can own port 53
+  min_ansible_version: "2.14"

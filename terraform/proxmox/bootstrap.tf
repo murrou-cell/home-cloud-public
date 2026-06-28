@@ -35,10 +35,16 @@ resource "null_resource" "ansible_bootstrap" {
                   "name": "bootstrap-k3s-worker"
                 },
                 "arguments": {
-                  "parameters": [{
-                    "name": "host_ip",
-                    "value": "${proxmox_virtual_environment_vm.vms[each.key].ipv4_addresses[1][0]}"
-                  }]
+                  "parameters": [
+                    {
+                      "name": "host_ip",
+                      "value": "${proxmox_virtual_environment_vm.vms[each.key].ipv4_addresses[1][0]}"
+                    },
+                    {
+                      "name": "node_type",
+                      "value": "${each.value.node_type}"
+                    }
+                  ]
                 }
               }
             }'

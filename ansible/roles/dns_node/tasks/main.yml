@@ -1,0 +1,33 @@
+---
+- name: Ensure resolved.conf.d directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Disable systemd-resolved stub listener
+  ansible.builtin.copy:
+    dest: /etc/systemd/resolved.conf.d/no-stub.conf
+    content: |
+      [Resolve]
+      DNSStubListener=no
+    mode: "0644"
+  notify: restart systemd-resolved
+
+- name: Remove temporary bootstrap DNS override
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d/bootstrap.conf
+    state: absent
+  notify: restart systemd-resolved
+
+- name: Flush handlers before writing resolv.conf
+  ansible.builtin.meta: flush_handlers
+
+- name: Set static resolv.conf pointing to upstream Cloudflare DNS
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    content: |
+      nameserver 1.1.1.1
+      nameserver 1.0.0.1
+    mode: "0644"
+    force: true
