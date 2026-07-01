@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: proxmox-cluster-join
+  namespace: {{ .Release.Namespace }}
+spec:
+  entrypoint: join-cluster
+  serviceAccountName: argo-workflow
+  ttlStrategy:
+    secondsAfterCompletion: 86400
+  arguments:
+    parameters:
+    - name: pve_ip
+      value: {{ .Values.proxmoxPrimaryIp | quote }}
+    - name: pve2_ip
+      value: {{ .Values.proxmoxNewNodeIp | quote }}
+  templates:
+  - name: join-cluster
+    inputs:
+      parameters:
+      - name: pve_ip
+      - name: pve2_ip
+      artifacts:
+      - name: repo
+        path: /workspace/repo
+        git:
+          repo: https://github.com/murrou-cell/home-cloud
+          revision: main
+          usernameSecret:
+            name: github-credentials
+            key: username
+          passwordSecret:
+            name: github-credentials
+            key: token
+    nodeSelector:
+      kubernetes.io/hostname: k3s-ops
+    container:
+      image: cytopia/ansible:latest-tools
+      command: [sh, /workspace/repo/ansible/scripts/proxmox-cluster-join.sh]
+      env:
+      - name: PVE_IP
+        value: "{{ "{{inputs.parameters.pve_ip}}" }}"
+      - name: PVE2_IP
+        value: "{{ "{{inputs.parameters.pve2_ip}}" }}"
+      - name: PVE_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Values.proxmoxCredentialsSecret | quote }}
+            key: pve_password
+      - name: PVE2_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Values.proxmoxCredentialsSecret | quote }}
+            key: pve2_password
+      volumeMounts:
+      - name: ssh-key
+        mountPath: /ssh
+        readOnly: true
+    volumes:
+    - name: ssh-key
+      secret:
+        secretName: {{ .Values.ansibleSshKeySecret | quote }}
+        defaultMode: 0400

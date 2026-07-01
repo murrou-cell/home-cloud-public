@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  role_name: proxmox_cluster_create
+  author: murrou
+  description: Create a Proxmox VE cluster on the primary node (idempotent — skips if cluster already exists)
+  min_ansible_version: "2.10"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+
+dependencies: []

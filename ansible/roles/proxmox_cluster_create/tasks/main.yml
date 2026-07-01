@@ -1,0 +1,29 @@
+---
+- name: Check if cluster already exists
+  ansible.builtin.stat:
+    path: /etc/pve/corosync.conf
+  register: corosync_conf
+
+- name: Create Proxmox cluster
+  ansible.builtin.command:
+    cmd: pvecm create {{ proxmox_cluster_name }}
+  when: not corosync_conf.stat.exists
+
+- name: Wait for cluster to become ready
+  ansible.builtin.command:
+    cmd: pvecm status
+  register: pvecm_status
+  until: pvecm_status.rc == 0
+  retries: 10
+  delay: 3
+  when: not corosync_conf.stat.exists
+
+- name: Show cluster status
+  ansible.builtin.command:
+    cmd: pvecm status
+  register: pvecm_status_final
+  changed_when: false
+
+- name: Print cluster status
+  ansible.builtin.debug:
+    msg: "{{ pvecm_status_final.stdout_lines }}"

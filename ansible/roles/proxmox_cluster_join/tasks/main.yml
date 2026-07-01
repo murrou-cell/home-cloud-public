@@ -1,0 +1,81 @@
+---
+- name: Check if already in cluster
+  ansible.builtin.stat:
+    path: /etc/pve/corosync.conf
+  register: corosync_conf
+
+- name: Authenticate against primary node API
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_primary_node_ip }}:8006/api2/json/access/ticket"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: root@pam
+      password: "{{ proxmox_primary_node_password }}"
+    validate_certs: false
+  register: primary_auth
+  delegate_to: localhost
+  become: false
+  no_log: true
+  when: not corosync_conf.stat.exists
+
+- name: Get cluster join info from primary node
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_primary_node_ip }}:8006/api2/json/cluster/config/join"
+    headers:
+      Cookie: "PVEAuthCookie={{ primary_auth.json.data.ticket }}"
+      CSRFPreventionToken: "{{ primary_auth.json.data.CSRFPreventionToken }}"
+    validate_certs: false
+  register: join_info
+  delegate_to: localhost
+  become: false
+  when: not corosync_conf.stat.exists
+
+- name: Authenticate against new node API
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host }}:8006/api2/json/access/ticket"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: root@pam
+      password: "{{ proxmox_new_node_password }}"
+    validate_certs: false
+  register: new_node_auth
+  delegate_to: localhost
+  become: false
+  no_log: true
+  when: not corosync_conf.stat.exists
+
+- name: Join cluster via API
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host }}:8006/api2/json/cluster/config/join"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      hostname: "{{ proxmox_primary_node_ip }}"
+      password: "{{ proxmox_primary_node_password }}"
+      fingerprint: "{{ join_info.json.data.nodelist[0].pve_fp }}"
+    headers:
+      Cookie: "PVEAuthCookie={{ new_node_auth.json.data.ticket }}"
+      CSRFPreventionToken: "{{ new_node_auth.json.data.CSRFPreventionToken }}"
+    validate_certs: false
+  delegate_to: localhost
+  become: false
+  no_log: true
+  when: not corosync_conf.stat.exists
+
+- name: Wait for corosync to come up
+  ansible.builtin.wait_for:
+    path: /etc/pve/corosync.conf
+    timeout: 60
+  when: not corosync_conf.stat.exists
+
+- name: Show cluster status
+  ansible.builtin.command:
+    cmd: pvecm status
+  register: pvecm_status
+  changed_when: false
+
+- name: Print cluster status
+  ansible.builtin.debug:
+    msg: "{{ pvecm_status.stdout_lines }}"

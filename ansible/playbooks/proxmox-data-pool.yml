@@ -1,0 +1,12 @@
+---
+- name: Mount 5TB disk and register as Proxmox data-pool storage
+  hosts: proxmox_hosts
+  become: true
+  vars:
+    proxmox_data_pool_device: /dev/sdb1
+    proxmox_data_pool_mount: /mnt/pve/data-pool
+    proxmox_data_pool_name: data-pool
+    proxmox_data_pool_content: images,rootdir
+  roles:
+    - role: proxmox_data_pool
+      when: inventory_hostname == 'pve2'

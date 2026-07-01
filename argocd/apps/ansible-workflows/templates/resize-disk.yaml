@@ -1,0 +1,58 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: resize-disk
+  namespace: {{ .Release.Namespace }}
+spec:
+  entrypoint: resize
+  serviceAccountName: argo-workflow
+  ttlStrategy:
+    secondsAfterCompletion: 86400
+  arguments:
+    parameters:
+    - name: host_ip
+      value: ""
+    - name: disk
+      value: "vda"
+    - name: partition
+      value: "1"
+  templates:
+  - name: resize
+    inputs:
+      parameters:
+      - name: host_ip
+      - name: disk
+      - name: partition
+      artifacts:
+      - name: repo
+        path: /workspace/repo
+        git:
+          repo: https://github.com/murrou-cell/home-cloud
+          revision: main
+          usernameSecret:
+            name: github-credentials
+            key: username
+          passwordSecret:
+            name: github-credentials
+            key: token
+    nodeSelector:
+      kubernetes.io/hostname: k3s-ops
+    container:
+      image: cytopia/ansible:latest-tools
+      command: [sh, /workspace/repo/ansible/scripts/resize-disk.sh]
+      env:
+      - name: HOST_IP
+        value: "{{ "{{inputs.parameters.host_ip}}" }}"
+      - name: DISK
+        value: "{{ "{{inputs.parameters.disk}}" }}"
+      - name: PARTITION
+        value: "{{ "{{inputs.parameters.partition}}" }}"
+      volumeMounts:
+      - name: ssh-key
+        mountPath: /ssh
+        readOnly: true
+    volumes:
+    - name: ssh-key
+      secret:
+        secretName: {{ .Values.ansibleSshKeySecret | quote }}
+        defaultMode: 0400

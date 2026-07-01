@@ -1,7 +1,7 @@
 atlantis:
-  atlantisUrl: https://atlantis.your-tailnet.ts.net
+  atlantisUrl: https://atlantis.<YOUR_TAILSCALE_DOMAIN>.ts.net
 
-  orgAllowlist: github.com/murrou-cell/home-cloud-public
+  orgAllowlist: github.com/murrou-cell/home-cloud
 
   hidePrevPlanComments: true
 
@@ -15,7 +15,7 @@ atlantis:
   volumeClaim:
     enabled: true
     dataStorage: 5Gi
-    storageClassName: ""
+    storageClassName: longhorn
 
   # Secrets from bitwarden-vault (synced before each ArgoCD sync via PreSync hook)
   environmentSecrets:

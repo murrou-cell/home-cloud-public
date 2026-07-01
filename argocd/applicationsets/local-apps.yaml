@@ -6,7 +6,7 @@ metadata:
 spec:
   generators:
     - git:
-        repoURL: https://github.com/murrou-cell/home-cloud-public
+        repoURL: https://github.com/murrou-cell/home-cloud
         revision: HEAD
         files:
           - path: argocd/apps/*/config.yaml

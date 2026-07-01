@@ -34,14 +34,14 @@ argo-workflows:
       # coredns-custom rewrites that hostname to argocd-server; insecureSkipVerify
       # accepts the self-signed cert. issuerAlias accepts the external iss claim in JWTs.
       issuer: http://argocd-server.argocd.svc.cluster.local/api/dex
-      issuerAlias: https://argo-cd.your-tailnet.ts.net/api/dex
+      issuerAlias: https://argo-cd.<YOUR_TAILSCALE_DOMAIN>.ts.net/api/dex
       clientId:
         name: argo-workflows-sso
         key: client-id
       clientSecret:
         name: argo-workflows-sso
         key: client-secret
-      redirectUrl: https://argo-workflows.your-tailnet.ts.net/oauth2/callback
+      redirectUrl: https://argo-workflows.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback
       rbac:
         enabled: true
       insecureSkipVerify: true

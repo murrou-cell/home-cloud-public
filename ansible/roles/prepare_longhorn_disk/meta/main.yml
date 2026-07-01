@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  role_name: prepare_longhorn_disk
+  author: murrou
+  description: Format /dev/vdb as ext4 and mount at /var/lib/longhorn (idempotent — skips if disk absent or already formatted)
+  min_ansible_version: "2.10"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

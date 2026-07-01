@@ -1,0 +1,10 @@
+---
+- name: Join Proxmox node to existing cluster
+  hosts: proxmox_new_nodes
+  become: true
+  vars:
+    proxmox_primary_node_ip: "{{ hostvars['pve']['ansible_host'] }}"
+    proxmox_primary_node_password: "{{ hostvars['pve']['ansible_password'] }}"
+    proxmox_new_node_password: "{{ hostvars['pve2']['ansible_password'] }}"
+  roles:
+    - proxmox_cluster_join

@@ -1,0 +1,12 @@
+proxmoxNodes:
+  - name: pve1
+    localIp: "<YOUR_PVE1_IP>"
+    peerIp: "<YOUR_PVE2_IP>"
+    k3sNode: k3s-worker
+  - name: pve2
+    localIp: "<YOUR_PVE2_IP>"
+    peerIp: "<YOUR_PVE1_IP>"
+    k3sNode: k3s-worker-2
+
+ansibleSshKeySecret: ansible-ssh-key
+checkIntervalSeconds: 120

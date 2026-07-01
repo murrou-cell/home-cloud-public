@@ -1,0 +1,6 @@
+---
+galaxy_info:
+  role_name: storage_disk
+  description: Partition, format, and mount a secondary data disk at /mnt/storage-disk
+  min_ansible_version: "2.9"
+dependencies: []

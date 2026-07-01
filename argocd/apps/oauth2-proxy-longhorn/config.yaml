@@ -1,0 +1,6 @@
+chart: oauth2-proxy-longhorn
+chartVersion: HEAD
+namespace: longhorn-system
+releaseName: oauth2-proxy-longhorn
+repoUrl: https://github.com/murrou-cell/home-cloud
+syncWave: "3"

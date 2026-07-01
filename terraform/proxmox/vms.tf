@@ -2,7 +2,7 @@ locals {
   vms = {
     k3s-master = {
       vm_id             = 100
-      description       = "k3s control plane"
+      description       = "k3s control plane node"
       cores             = 2
       memory_mb         = 4096
       disk_size         = 20
@@ -13,26 +13,36 @@ locals {
       vm_id             = 101
       description       = "k3s worker — runs all workloads (ArgoCD, Prometheus, Grafana, Ollama)"
       cores             = 4
-      memory_mb         = 8192
-      disk_size         = 50
+      memory_mb         = 6144
+      disk_size         = 150
+      resize_disk       = true
       ip_address        = "dhcp"
       bootstrap_ansible = false
+      extra_disks = [
+        { size = 100, interface = "virtio1" }
+      ]
     }
     k3s-worker-2 = {
-      vm_id             = 102
-      description       = "k3s second worker — additional compute capacity"
+      vm_id             = 107
+      description       = "k3s worker on pve2 — Longhorn replica + quorum-watchdog"
       cores             = 2
       memory_mb         = 4096
-      disk_size         = 30
+      disk_size         = 20
       ip_address        = "dhcp"
       bootstrap_ansible = true
       node_type         = "worker"
+      node_name         = "pve2"
+      template_id       = 9001
+      cpu_type          = "x86-64-v2"
+      extra_disks = [
+        { size = 100, interface = "virtio1" }
+      ]
     }
     k3s-ops = {
       vm_id             = 104
       description       = "Dedicated ops node — runs Atlantis and Argo Workflows isolated from application workloads"
       cores             = 2
-      memory_mb         = 5120
+      memory_mb         = 3072
       disk_size         = 20
       ip_address        = "dhcp"
       bootstrap_ansible = true
@@ -40,14 +50,27 @@ locals {
     }
     k3s-dns = {
       vm_id             = 105
-      description       = "Dedicated DNS node — runs cloudflared-doh with hostNetwork on a pinned static IP"
+      description       = "Dedicated DNS + VPN node — runs cloudflared-doh and warp-vpn with hostNetwork on a pinned static IP"
       cores             = 1
-      memory_mb         = 512
+      memory_mb         = 1536
       disk_size         = 10
-      ip_address        = "<YOUR_IP>/24"
+      ip_address        = "<YOUR_DNS_VM_IP>/24"
       gateway           = "<YOUR_GATEWAY_IP>"
       bootstrap_ansible = true
       node_type         = "dns"
+    }
+    k3s-storage = {
+      vm_id             = 106
+      description       = "Dedicated storage node — MinIO data on local-path; Longhorn target when second Proxmox node added"
+      cores             = 2
+      memory_mb         = 2048
+      disk_size         = 20
+      ip_address        = "dhcp"
+      bootstrap_ansible = true
+      node_type         = "storage"
+      extra_disks = [
+        { size = 200, interface = "virtio1" }
+      ]
     }
   }
 }
@@ -57,17 +80,17 @@ resource "proxmox_virtual_environment_vm" "vms" {
 
   name        = each.key
   description = each.value.description
-  node_name   = var.proxmox_node
+  node_name   = try(each.value.node_name, var.proxmox_node)
   vm_id       = each.value.vm_id
 
   clone {
-    vm_id = var.vm_template_id
+    vm_id = try(each.value.template_id, var.vm_template_id)
     full  = true
   }
 
   cpu {
     cores = each.value.cores
-    type  = "x86-64-v2-AES"
+    type  = try(each.value.cpu_type, "x86-64-v2-AES")
   }
 
   memory {
@@ -81,6 +104,17 @@ resource "proxmox_virtual_environment_vm" "vms" {
     interface    = "virtio0"
     iothread     = true
     discard      = "on"
+  }
+
+  dynamic "disk" {
+    for_each = try(each.value.extra_disks, [])
+    content {
+      datastore_id = "local-lvm"
+      size         = disk.value.size
+      interface    = disk.value.interface
+      iothread     = true
+      discard      = "on"
+    }
   }
 
   network_device {

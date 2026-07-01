@@ -2,5 +2,5 @@ chart: oauth2-proxy-atlantis
 chartVersion: HEAD
 namespace: atlantis
 releaseName: oauth2-proxy-atlantis
-repoUrl: https://github.com/murrou-cell/home-cloud-public
+repoUrl: https://github.com/murrou-cell/home-cloud
 syncWave: "0"

@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quorum-watchdog-script
+  namespace: {{ .Release.Namespace }}
+data:
+  watchdog.sh: |
+    #!/usr/bin/env sh
+    set -e
+
+    python3 -c "
+    parts = open('/ssh/id_rsa').read().strip().split('-----')
+    header = '-----' + parts[1] + '-----'
+    b64    = parts[2].strip().replace(' ', '')
+    footer = '-----' + parts[3] + '-----'
+    open('/tmp/id_rsa', 'w').write(header + '\n' + b64 + '\n' + footer + '\n')
+    "
+    chmod 600 /tmp/id_rsa
+
+    echo "Quorum watchdog started. LOCAL=${LOCAL_PVE_IP}, PEER=${PEER_PVE_IP}"
+
+    while true; do
+      STATUS=$(ssh \
+        -o StrictHostKeyChecking=no \
+        -o ConnectTimeout=5 \
+        -o BatchMode=yes \
+        -i /tmp/id_rsa \
+        root@"${LOCAL_PVE_IP}" \
+        "pvecm status 2>/dev/null" 2>/dev/null) || STATUS=""
+
+      QUORATE=$(echo "${STATUS}" | grep "Quorate:" | awk '{print $2}')
+
+      if [ "${QUORATE}" = "Yes" ]; then
+        echo "$(date -Iseconds): cluster quorate"
+      elif [ "${QUORATE}" = "No" ]; then
+        if ! ssh \
+          -o StrictHostKeyChecking=no \
+          -o ConnectTimeout=3 \
+          -o BatchMode=yes \
+          -i /tmp/id_rsa \
+          root@"${PEER_PVE_IP}" true 2>/dev/null; then
+          echo "$(date -Iseconds): peer ${PEER_PVE_IP} unreachable — running pvecm expected 1 on ${LOCAL_PVE_IP}"
+          ssh \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=5 \
+            -o BatchMode=yes \
+            -i /tmp/id_rsa \
+            root@"${LOCAL_PVE_IP}" \
+            "pvecm expected 1" || true
+        else
+          echo "$(date -Iseconds): quorum lost but peer ${PEER_PVE_IP} still reachable — possible partition, not acting"
+        fi
+      else
+        echo "$(date -Iseconds): could not reach local node ${LOCAL_PVE_IP}"
+      fi
+
+      sleep {{ .Values.checkIntervalSeconds }}
+    done

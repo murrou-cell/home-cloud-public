@@ -1,0 +1,51 @@
+---
+- name: Check device exists
+  ansible.builtin.stat:
+    path: "{{ proxmox_data_pool_device }}"
+  register: pool_device
+
+- name: Fail if device not found
+  ansible.builtin.fail:
+    msg: "Device {{ proxmox_data_pool_device }} not found on {{ inventory_hostname }}"
+  when: not pool_device.stat.exists
+
+- name: Create mount point
+  ansible.builtin.file:
+    path: "{{ proxmox_data_pool_mount }}"
+    state: directory
+    mode: "0755"
+
+- name: Get device UUID
+  ansible.builtin.command: blkid -s UUID -o value {{ proxmox_data_pool_device }}
+  register: pool_uuid
+  changed_when: false
+
+- name: Mount device and persist in fstab
+  ansible.posix.mount:
+    path: "{{ proxmox_data_pool_mount }}"
+    src: "UUID={{ pool_uuid.stdout }}"
+    fstype: ext4
+    opts: defaults,nofail
+    state: mounted
+
+- name: Check if storage pool already registered in Proxmox
+  ansible.builtin.command: pvesm status {{ proxmox_data_pool_name }}
+  register: pvesm_check
+  changed_when: false
+  failed_when: false
+
+- name: Register storage pool with Proxmox
+  ansible.builtin.command: >
+    pvesm add dir {{ proxmox_data_pool_name }}
+    --path {{ proxmox_data_pool_mount }}
+    --content {{ proxmox_data_pool_content }}
+  when: pvesm_check.rc != 0
+
+- name: Show storage pool status
+  ansible.builtin.command: pvesm status {{ proxmox_data_pool_name }}
+  register: pvesm_status
+  changed_when: false
+
+- name: Print storage pool status
+  ansible.builtin.debug:
+    msg: "{{ pvesm_status.stdout_lines }}"

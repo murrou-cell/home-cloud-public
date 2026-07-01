@@ -1,0 +1,33 @@
+---
+- name: Check for data disk
+  ansible.builtin.stat:
+    path: /dev/vdb
+  register: data_disk
+
+- name: Partition data disk
+  ansible.builtin.command:
+    cmd: parted -s /dev/vdb mklabel gpt mkpart primary ext4 0% 100%
+    creates: /dev/vdb1
+  when: data_disk.stat.exists
+
+- name: Format data disk partition
+  ansible.builtin.filesystem:
+    fstype: ext4
+    dev: /dev/vdb1
+  when: data_disk.stat.exists
+
+- name: Create mount point
+  ansible.builtin.file:
+    path: /mnt/storage-disk
+    state: directory
+    mode: "0755"
+  when: data_disk.stat.exists
+
+- name: Mount data disk and persist in fstab
+  ansible.builtin.mount:
+    path: /mnt/storage-disk
+    src: /dev/vdb1
+    fstype: ext4
+    opts: defaults
+    state: mounted
+  when: data_disk.stat.exists

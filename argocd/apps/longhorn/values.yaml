@@ -1,0 +1,28 @@
+longhorn:
+  global:
+    tolerations:
+      - key: dedicated
+        operator: Exists
+        effect: NoSchedule
+
+  preUpgradeChecker:
+    jobEnabled: false
+
+  defaultSettings:
+    createDefaultDiskLabeledNodes: true
+    defaultDataPath: /var/lib/longhorn
+    defaultReplicaCount: 2
+    replicaSoftAntiAffinity: true
+    storageMinimalAvailablePercentage: 10
+    upgradeChecker: false
+    taintToleration: "dedicated=dns:NoSchedule"
+
+  persistence:
+    defaultClass: true
+    defaultFsType: ext4
+    defaultClassReplicaCount: 2
+    defaultDataLocality: best-effort
+
+storageNodes:
+  - k3s-worker
+  - k3s-worker-2

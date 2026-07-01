@@ -1,0 +1,57 @@
+{{- range .Values.proxmoxNodes }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quorum-watchdog-{{ .name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quorum-watchdog
+      proxmox-node: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: quorum-watchdog
+        proxmox-node: {{ .name }}
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: {{ .k3sNode }}
+      tolerations:
+      - operator: Exists
+        effect: NoExecute
+      containers:
+      - name: watchdog
+        image: cytopia/ansible:latest-tools
+        command: [sh, /scripts/watchdog.sh]
+        env:
+        - name: LOCAL_PVE_IP
+          value: {{ .localIp | quote }}
+        - name: PEER_PVE_IP
+          value: {{ .peerIp | quote }}
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+          readOnly: true
+        - name: ssh-key
+          mountPath: /ssh
+          readOnly: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+      volumes:
+      - name: script
+        configMap:
+          name: quorum-watchdog-script
+          defaultMode: 0755
+      - name: ssh-key
+        secret:
+          secretName: {{ $.Values.ansibleSshKeySecret }}
+          defaultMode: 0400
+      restartPolicy: Always
+{{- end }}

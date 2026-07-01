@@ -2,5 +2,5 @@ chart: argocd
 chartVersion: HEAD
 namespace: argocd
 releaseName: argocd
-repoUrl: https://github.com/murrou-cell/home-cloud-public
+repoUrl: https://github.com/murrou-cell/home-cloud
 syncWave: "0"

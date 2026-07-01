@@ -1,0 +1,46 @@
+---
+- name: Grow partition and resize filesystem after VM disk expansion
+  hosts: target
+  become: true
+  vars:
+    disk: vda
+    partition: "1"
+  tasks:
+  - name: Install cloud-guest-utils (provides growpart)
+    ansible.builtin.apt:
+      name: cloud-guest-utils
+      state: present
+      update_cache: false
+
+  - name: Grow partition to fill available disk space
+    ansible.builtin.command:
+      cmd: "growpart /dev/{{ disk }} {{ partition }}"
+    register: growpart_result
+    changed_when: "'CHANGED' in growpart_result.stdout"
+    failed_when: growpart_result.rc != 0 and 'NOCHANGE' not in growpart_result.stdout
+
+  - name: Detect filesystem type
+    ansible.builtin.command:
+      cmd: "blkid -o value -s TYPE /dev/{{ disk }}{{ partition }}"
+    register: fs_type
+    changed_when: false
+
+  - name: Resize ext4 filesystem
+    ansible.builtin.command:
+      cmd: "resize2fs /dev/{{ disk }}{{ partition }}"
+    when: fs_type.stdout == 'ext4'
+
+  - name: Resize xfs filesystem
+    ansible.builtin.command:
+      cmd: "xfs_growfs /dev/{{ disk }}{{ partition }}"
+    when: fs_type.stdout == 'xfs'
+
+  - name: Report new disk size
+    ansible.builtin.command:
+      cmd: "df -h /"
+    register: df_result
+    changed_when: false
+
+  - name: Show new disk size
+    ansible.builtin.debug:
+      msg: "{{ df_result.stdout_lines }}"

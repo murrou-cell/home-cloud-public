@@ -3,7 +3,7 @@ argo-cd:
     params:
       server.insecure: "false"
     cm:
-      url: https://argo-cd.your-tailnet.ts.net
+      url: https://argo-cd.<YOUR_TAILSCALE_DOMAIN>.ts.net
       admin.enabled: "false"
       dex.config: |
         connectors:
@@ -19,16 +19,21 @@ argo-cd:
           name: Argo Workflows
           secret: $dex.workflows.clientSecret
           redirectURIs:
-          - https://argo-workflows.your-tailnet.ts.net/oauth2/callback
+          - https://argo-workflows.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback
         - id: atlantis-oauth2-proxy
           name: Atlantis
           secret: $dex.atlantis.clientSecret
           redirectURIs:
-          - https://atlantis.your-tailnet.ts.net/oauth2/callback
+          - https://atlantis.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback
+        - id: longhorn-oauth2-proxy
+          name: Longhorn
+          secret: $dex.longhorn.clientSecret
+          redirectURIs:
+          - https://longhorn.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback
     rbac:
       policy.default: role:readonly
       policy.csv: |
-        g, your-github-email@example.com, role:admin
+        g, <YOUR_EMAIL>, role:admin
       scopes: "[groups, email]"
 
   crds:
@@ -66,7 +71,7 @@ argo-cd:
         cpu: 50m
         memory: 128Mi
       limits:
-        memory: 256Mi
+        memory: 1024Mi
 
   applicationSet:
     nodeSelector:
@@ -86,7 +91,7 @@ argo-cd:
         cpu: 100m
         memory: 256Mi
       limits:
-        memory: 512Mi
+        memory: 1024Mi
 
   redis:
     nodeSelector:

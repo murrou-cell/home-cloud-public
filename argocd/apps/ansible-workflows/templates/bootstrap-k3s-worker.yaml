@@ -27,7 +27,7 @@ spec:
       - name: repo
         path: /workspace/repo
         git:
-          repo: https://github.com/murrou-cell/home-cloud-public
+          repo: https://github.com/murrou-cell/home-cloud
           revision: main
           usernameSecret:
             name: github-credentials

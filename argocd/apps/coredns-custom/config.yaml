@@ -2,5 +2,5 @@ chart: coredns-custom
 chartVersion: HEAD
 namespace: kube-system
 releaseName: coredns-custom
-repoUrl: https://github.com/murrou-cell/home-cloud-public
+repoUrl: https://github.com/murrou-cell/home-cloud
 syncWave: "0"

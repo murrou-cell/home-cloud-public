@@ -8,4 +8,4 @@ data:
   # Argo Workflows can reach Dex's token endpoint from inside the cluster.
   # k3s CoreDNS imports *.override files inside the .:53 server block.
   argo-cd-tailscale.override: |
-    rewrite name argo-cd.your-tailnet.ts.net argocd-server.argocd.svc.cluster.local
+    rewrite name argo-cd.<YOUR_TAILSCALE_DOMAIN>.ts.net argocd-server.argocd.svc.cluster.local

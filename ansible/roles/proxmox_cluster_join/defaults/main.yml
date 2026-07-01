@@ -1,0 +1,4 @@
+---
+proxmox_primary_node_ip: ""
+proxmox_primary_node_password: ""
+proxmox_new_node_password: ""

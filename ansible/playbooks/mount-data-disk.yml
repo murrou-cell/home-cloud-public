@@ -1,0 +1,6 @@
+---
+- name: Mount storage data disk
+  hosts: k3s_workers
+  become: true
+  roles:
+    - storage_disk

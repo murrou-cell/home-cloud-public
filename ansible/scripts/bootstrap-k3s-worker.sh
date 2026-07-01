@@ -43,3 +43,17 @@ ansible-playbook \
   -i /tmp/inventory.ini \
   playbooks/k3s-bootstrap.yml \
   --limit "${LIMIT}"
+
+if [ "${NODE_TYPE}" = "storage" ]; then
+  ansible-playbook \
+    -i /tmp/inventory.ini \
+    playbooks/mount-data-disk.yml \
+    --limit "${LIMIT}"
+fi
+
+if [ "${NODE_TYPE}" = "worker" ]; then
+  ansible-playbook \
+    -i /tmp/inventory.ini \
+    playbooks/prepare-longhorn-disk.yml \
+    --limit "${LIMIT}"
+fi

@@ -1,0 +1,3 @@
+---
+longhorn_disk_device: /dev/vdb
+longhorn_mount_point: /var/lib/longhorn

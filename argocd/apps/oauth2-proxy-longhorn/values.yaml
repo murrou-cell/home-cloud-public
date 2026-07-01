@@ -1,0 +1,37 @@
+oauth2-proxy:
+  fullnameOverride: oauth2-proxy-longhorn
+
+  config:
+    existingSecret: oauth2-proxy-longhorn-secret
+
+  extraArgs:
+    provider: oidc
+    oidc-issuer-url: "http://argocd-server.argocd.svc.cluster.local/api/dex"
+    insecure-oidc-skip-issuer-verification: "true"
+    ssl-insecure-skip-verify: "true"
+    upstream: "http://longhorn-frontend:80"
+    redirect-url: "https://longhorn.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback"
+    authenticated-emails-file: "/etc/oauth2-proxy/allowed-emails"
+
+  extraVolumes:
+    - name: allowed-emails
+      configMap:
+        name: longhorn-allowed-emails
+
+  extraVolumeMounts:
+    - name: allowed-emails
+      mountPath: /etc/oauth2-proxy
+      readOnly: true
+
+  ingress:
+    enabled: false
+
+  nodeSelector:
+    kubernetes.io/hostname: k3s-ops
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi

@@ -1,2 +1,7 @@
-k3sMasterIp: "your-k3s-master-ip"
+k3sMasterIp: "<YOUR_K3S_MASTER_IP>"
 ansibleSshKeySecret: "ansible-ssh-key"
+
+proxmoxPrimaryIp: "<YOUR_PVE1_IP>"
+proxmoxClusterName: "home-cluster"
+proxmoxNewNodeIp: "<YOUR_PVE2_IP>"
+proxmoxCredentialsSecret: "proxmox-credentials"

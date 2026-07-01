@@ -15,7 +15,7 @@ oauth2-proxy:
     insecure-oidc-skip-issuer-verification: "true"
     ssl-insecure-skip-verify: "true"
     upstream: "http://atlantis:80"
-    redirect-url: "https://atlantis.your-tailnet.ts.net/oauth2/callback"
+    redirect-url: "https://atlantis.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback"
     email-domain: "*"
     # GitHub webhooks POST to /events — bypass auth so they still reach Atlantis
     skip-auth-route: "^/events$"

@@ -1,0 +1,6 @@
+---
+- name: Prepare dedicated Longhorn disk on k3s nodes
+  hosts: all
+  become: true
+  roles:
+    - prepare_longhorn_disk

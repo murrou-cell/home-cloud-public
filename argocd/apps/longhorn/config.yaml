@@ -1,0 +1,6 @@
+chart: longhorn
+chartVersion: HEAD
+namespace: longhorn-system
+releaseName: longhorn
+repoUrl: https://github.com/murrou-cell/home-cloud
+syncWave: "2"

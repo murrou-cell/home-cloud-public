@@ -1,0 +1,38 @@
+---
+- name: Check if Longhorn disk device exists
+  ansible.builtin.stat:
+    path: "{{ longhorn_disk_device }}"
+  register: longhorn_disk
+
+- name: Skip if no Longhorn disk present
+  ansible.builtin.meta: end_host
+  when: not longhorn_disk.stat.exists
+
+- name: Check if disk is already formatted
+  ansible.builtin.command: blkid {{ longhorn_disk_device }}
+  register: blkid_result
+  changed_when: false
+  failed_when: false
+
+- name: Format disk as ext4
+  ansible.builtin.command: mkfs.ext4 -F {{ longhorn_disk_device }}
+  when: blkid_result.rc != 0
+
+- name: Create Longhorn mount point
+  ansible.builtin.file:
+    path: "{{ longhorn_mount_point }}"
+    state: directory
+    mode: "0750"
+
+- name: Get disk UUID
+  ansible.builtin.command: blkid -s UUID -o value {{ longhorn_disk_device }}
+  register: disk_uuid
+  changed_when: false
+
+- name: Mount disk and persist in fstab
+  ansible.posix.mount:
+    path: "{{ longhorn_mount_point }}"
+    src: "UUID={{ disk_uuid.stdout }}"
+    fstype: ext4
+    opts: defaults
+    state: mounted
