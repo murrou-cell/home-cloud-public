@@ -1,0 +1,6 @@
+chart: alertmanager-ntfy-bridge
+chartVersion: HEAD
+namespace: ntfy
+releaseName: alertmanager-ntfy-bridge
+repoUrl: https://github.com/murrou-cell/home-cloud
+syncWave: "1"

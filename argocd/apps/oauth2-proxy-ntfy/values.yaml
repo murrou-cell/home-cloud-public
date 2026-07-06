@@ -1,0 +1,34 @@
+oauth2-proxy:
+  fullnameOverride: oauth2-proxy-ntfy
+
+  config:
+    # client-id injected via templates/secret.yaml (bitwarden can't create hyphenated keys).
+    # client-secret and cookie-secret are managed by bitwarden-vault in the same secret.
+    existingSecret: oauth2-proxy-ntfy-secret
+
+  extraArgs:
+    provider: oidc
+    oidc-issuer-url: "http://argocd-server.argocd.svc.cluster.local/api/dex"
+    insecure-oidc-skip-issuer-verification: "true"
+    ssl-insecure-skip-verify: "true"
+    upstream: "http://ntfy:80"
+    redirect-url: "https://ntfy.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback"
+    email-domain: "*"
+    # Only the browser UI goes through Dex; ntfy's native clients bypass this
+    # proxy and hit ntfy's own deny-all gate directly. \x2c is hex-escaped -
+    # oauth2-proxy treats a literal comma here as its own route separator.
+    skip-auth-route: "^/([-_A-Za-z0-9\\x2c]+(/(json|sse|ws|raw|auth))?|v1/.*|static/.*|docs/.*)$"
+
+  # Disable built-in ingress — custom Tailscale Funnel ingress in templates/
+  ingress:
+    enabled: false
+
+  nodeSelector:
+    kubernetes.io/hostname: k3s-worker
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi

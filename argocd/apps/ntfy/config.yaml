@@ -1,0 +1,6 @@
+chart: ntfy
+chartVersion: HEAD
+namespace: ntfy
+releaseName: ntfy
+repoUrl: https://github.com/murrou-cell/home-cloud
+syncWave: "1"

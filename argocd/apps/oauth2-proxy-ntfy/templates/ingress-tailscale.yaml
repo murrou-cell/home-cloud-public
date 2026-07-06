@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ntfy-tailscale
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    tailscale.com/funnel: "true"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: oauth2-proxy-ntfy
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - ntfy

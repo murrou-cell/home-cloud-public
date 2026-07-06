@@ -1,0 +1,28 @@
+image:
+  repository: binwiederhier/ntfy
+  tag: v2.25.0
+
+nodeSelector:
+  kubernetes.io/hostname: k3s-worker
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+persistence:
+  size: 2Gi
+  storageClass: longhorn
+
+# Funnel hostname - Alertmanager/bridge talk to the in-cluster Service, not this.
+baseUrl: "https://ntfy.<YOUR_TAILSCALE_DOMAIN>.ts.net"
+
+topics:
+  - pf-alerts-critical
+  - pf-alerts-warning
+  - pf-alerts-info
+
+# Written by bitwarden-vault (PreSync): adminpassword, publisherpassword.
+credentialsSecret: ntfy-credentials

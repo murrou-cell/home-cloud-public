@@ -60,3 +60,9 @@ spec:
           jsonPointers:
             - /data/client-secret
             - /data/cookie-secret
+        - group: ""
+          kind: Secret
+          name: oauth2-proxy-ntfy-secret
+          jsonPointers:
+            - /data/client-secret
+            - /data/cookie-secret

@@ -1,0 +1,6 @@
+chart: oauth2-proxy-ntfy
+chartVersion: HEAD
+namespace: ntfy
+releaseName: oauth2-proxy-ntfy
+repoUrl: https://github.com/murrou-cell/home-cloud
+syncWave: "1"

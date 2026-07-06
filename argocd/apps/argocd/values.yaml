@@ -35,6 +35,11 @@ argo-cd:
           secret: $dex.grafana.clientSecret
           redirectURIs:
           - https://grafana.<YOUR_TAILSCALE_DOMAIN>.ts.net/login/generic_oauth
+        - id: ntfy-oauth2-proxy
+          name: ntfy
+          secret: $dex.ntfy.clientSecret
+          redirectURIs:
+          - https://ntfy.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback
     rbac:
       policy.default: role:readonly
       policy.csv: |

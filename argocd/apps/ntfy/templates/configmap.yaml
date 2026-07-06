@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ntfy-config
+  namespace: {{ .Release.Namespace }}
+data:
+  server.yml: |
+    base-url: "{{ .Values.baseUrl }}"
+    listen-http: ":80"
+    behind-proxy: true
+    auth-file: "/var/lib/ntfy/auth.db"
+    auth-default-access: "deny-all"
+    cache-file: "/var/lib/ntfy/cache.db"
+    attachment-cache-dir: "/var/lib/ntfy/attachments"
+  # Idempotent (--ignore-exists no-ops on rerun). Briefly starts the server
+  # to bootstrap auth.db on a fresh PVC first - the CLI refuses to touch a
+  # user/access db that doesn't exist yet - then runs real provisioning.
+  provision.sh: |
+    #!/bin/sh
+    set -eu
+    if [ ! -f /var/lib/ntfy/auth.db ]; then
+      ntfy serve --config /etc/ntfy/server.yml &
+      SERVER_PID=$!
+      for i in $(seq 1 30); do
+        [ -f /var/lib/ntfy/auth.db ] && break
+        sleep 0.5
+      done
+      kill "$SERVER_PID"
+      wait "$SERVER_PID" 2>/dev/null || true
+    fi
+    NTFY_PASSWORD="$ADMIN_PASSWORD" ntfy user --config /etc/ntfy/server.yml add --role=admin --ignore-exists ntfy-admin
+    NTFY_PASSWORD="$PUBLISHER_PASSWORD" ntfy user --config /etc/ntfy/server.yml add --ignore-exists ntfy-publisher
+    {{- range .Values.topics }}
+    ntfy access --config /etc/ntfy/server.yml ntfy-publisher {{ . }} write-only
+    {{- end }}

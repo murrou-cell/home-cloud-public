@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ntfy
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  # RWO Longhorn volume - Recreate avoids a rollout deadlocking on the mount.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ntfy
+  template:
+    metadata:
+      labels:
+        app: ntfy
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      initContainers:
+        - name: provision
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["sh", "/etc/ntfy/provision.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_BIND_SERVICE"]
+          env:
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecret }}
+                  key: adminpassword
+            - name: PUBLISHER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecret }}
+                  key: publisherpassword
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ntfy
+            - name: data
+              mountPath: /var/lib/ntfy
+      containers:
+        - name: ntfy
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["ntfy", "serve", "--config", "/etc/ntfy/server.yml"]
+          ports:
+            - containerPort: 80
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          # Stays root for the :80 bind; capabilities pared down to just that.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_BIND_SERVICE"]
+          # timeoutSeconds/periodSeconds relaxed from defaults - single
+          # replica, so a flaky liveness check would restart the one thing
+          # every alert flows through.
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: 80
+            timeoutSeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: 80
+            timeoutSeconds: 5
+            periodSeconds: 15
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ntfy
+            - name: data
+              mountPath: /var/lib/ntfy
+      volumes:
+        - name: config
+          configMap:
+            name: ntfy-config
+            defaultMode: 0755
+        - name: data
+          persistentVolumeClaim:
+            claimName: ntfy-data

@@ -52,8 +52,38 @@ kube-prometheus-stack:
             resources:
               requests:
                 storage: 2Gi
-    # Default chart config already ships a no-op 'null' receiver/route —
-    # left as-is until a real notification channel is decided.
+
+    # Routes by the `severity` label to alertmanager-ntfy-bridge, which
+    # translates the webhook into an ntfy publish call. No matching severity
+    # falls through to the chart's default no-op receiver. Watchdog/
+    # InfoInhibitor stay unrouted on purpose - they're meta-alerts.
+    config:
+      route:
+        receiver: "null"
+        routes:
+          - receiver: ntfy-critical
+            matchers:
+              - severity = critical
+          - receiver: ntfy-warning
+            matchers:
+              - severity = warning
+          - receiver: ntfy-info
+            matchers:
+              - severity = info
+      receivers:
+        - name: "null"
+        - name: ntfy-critical
+          webhook_configs:
+            - url: http://alertmanager-ntfy-bridge.ntfy.svc.cluster.local/critical
+              send_resolved: true
+        - name: ntfy-warning
+          webhook_configs:
+            - url: http://alertmanager-ntfy-bridge.ntfy.svc.cluster.local/warning
+              send_resolved: true
+        - name: ntfy-info
+          webhook_configs:
+            - url: http://alertmanager-ntfy-bridge.ntfy.svc.cluster.local/info
+              send_resolved: true
 
   kube-state-metrics:
     nodeSelector:

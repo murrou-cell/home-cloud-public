@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ntfy
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: ntfy
+  policyTypes:
+    - Ingress
+  ingress:
+    # oauth2-proxy-ntfy: every Funnel/browser/API request passes through it
+    # to reach ntfy, whether or not skip-auth-route applied.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: oauth2-proxy-ntfy
+      ports:
+        - port: 80
+    # alertmanager-ntfy-bridge: publishes alerts directly.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: alertmanager-ntfy-bridge
+      ports:
+        - port: 80

@@ -1,0 +1,18 @@
+image:
+  # Built by .github/workflows/alertmanager-ntfy-bridge.yml on push to main.
+  repository: ghcr.io/murrou-cell/alertmanager-ntfy-bridge
+  tag: latest
+
+nodeSelector:
+  kubernetes.io/hostname: k3s-worker
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 64Mi
+
+# Same secret ntfy's provisioning init container reads — the bridge
+# authenticates to ntfy as the same write-only publisher user.
+credentialsSecret: ntfy-credentials
