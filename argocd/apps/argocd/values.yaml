@@ -30,6 +30,11 @@ argo-cd:
           secret: $dex.longhorn.clientSecret
           redirectURIs:
           - https://longhorn.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback
+        - id: grafana
+          name: Grafana
+          secret: $dex.grafana.clientSecret
+          redirectURIs:
+          - https://grafana.<YOUR_TAILSCALE_DOMAIN>.ts.net/login/generic_oauth
     rbac:
       policy.default: role:readonly
       policy.csv: |
@@ -42,60 +47,90 @@ argo-cd:
   dex:
     enabled: true
     nodeSelector:
-      kubernetes.io/hostname: k3s-worker
+      kubernetes.io/hostname: k3s-ops
     resources:
       requests:
         cpu: 10m
         memory: 32Mi
       limits:
         memory: 64Mi
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        additionalLabels:
+          release: kube-prometheus-stack
 
   notifications:
     enabled: false
 
   server:
     nodeSelector:
-      kubernetes.io/hostname: k3s-worker
+      kubernetes.io/hostname: k3s-ops
     resources:
       requests:
         cpu: 50m
         memory: 128Mi
       limits:
         memory: 256Mi
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        additionalLabels:
+          release: kube-prometheus-stack
 
   repoServer:
     nodeSelector:
-      kubernetes.io/hostname: k3s-worker
+      kubernetes.io/hostname: k3s-ops
     resources:
       requests:
         cpu: 50m
         memory: 128Mi
       limits:
         memory: 1024Mi
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        additionalLabels:
+          release: kube-prometheus-stack
 
   applicationSet:
     nodeSelector:
-      kubernetes.io/hostname: k3s-worker
+      kubernetes.io/hostname: k3s-ops
     resources:
       requests:
         cpu: 10m
         memory: 64Mi
       limits:
         memory: 128Mi
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        additionalLabels:
+          release: kube-prometheus-stack
 
   controller:
     nodeSelector:
-      kubernetes.io/hostname: k3s-worker
+      kubernetes.io/hostname: k3s-ops
     resources:
       requests:
         cpu: 100m
         memory: 256Mi
       limits:
         memory: 1024Mi
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        additionalLabels:
+          release: kube-prometheus-stack
 
   redis:
     nodeSelector:
-      kubernetes.io/hostname: k3s-worker
+      kubernetes.io/hostname: k3s-ops
     resources:
       requests:
         cpu: 10m

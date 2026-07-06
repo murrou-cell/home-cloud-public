@@ -1,0 +1,15 @@
+{{- range $path, $_ := .Files.Glob "rules/*.yaml" }}
+{{- $name := base $path | trimSuffix ".yaml" }}
+{{- $content := $.Files.Get $path | fromYaml }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+{{ toYaml $content.groups | indent 4 }}
+{{- end }}

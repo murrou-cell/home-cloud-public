@@ -1,0 +1,149 @@
+loki:
+  deploymentMode: SingleBinary
+
+  loki:
+    auth_enabled: false
+
+    commonConfig:
+      replication_factor: 1
+
+    storage:
+      type: filesystem
+
+    schemaConfig:
+      configs:
+        - from: "2026-01-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+
+    limits_config:
+      retention_period: 168h # 7 days
+
+    compactor:
+      retention_enabled: true
+      delete_request_store: filesystem
+
+  singleBinary:
+    replicas: 1
+    nodeSelector:
+      kubernetes.io/hostname: k3s-worker
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+    persistence:
+      enabled: true
+      storageClass: longhorn
+      size: 20Gi
+
+  # Nginx gateway not needed at this scale — Grafana/Alloy talk to the
+  # singleBinary service directly.
+  gateway:
+    enabled: false
+
+  # Zero out SimpleScalable-mode components; deploymentMode: SingleBinary
+  # already skips rendering these, this just keeps intent explicit.
+  read:
+    replicas: 0
+  write:
+    replicas: 0
+  backend:
+    replicas: 0
+
+  monitoring:
+    selfMonitoring:
+      enabled: false
+      grafanaAgent:
+        installOperator: false
+    dashboards:
+      enabled: true
+    rules:
+      enabled: true
+      labels:
+        release: kube-prometheus-stack
+
+  lokiCanary:
+    enabled: false
+
+  test:
+    enabled: false
+
+  chunksCache:
+    enabled: false
+  resultsCache:
+    enabled: false
+
+alloy:
+  alloy:
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+
+    configMap:
+      create: true
+      content: |
+        discovery.kubernetes "pods" {
+          role = "pod"
+        }
+
+        discovery.relabel "pod_logs" {
+          targets = discovery.kubernetes.pods.targets
+
+          rule {
+            source_labels = ["__meta_kubernetes_namespace"]
+            target_label  = "namespace"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_name"]
+            target_label  = "pod"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_container_name"]
+            target_label  = "container"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_node_name"]
+            target_label  = "node"
+          }
+          rule {
+            // app.kubernetes.io/instance == the Argo CD Application/release
+            // name for every Helm-templated app in this repo — lets Grafana
+            // filter logs per-application.
+            source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_instance"]
+            target_label  = "app"
+          }
+        }
+
+        loki.source.kubernetes "pods" {
+          targets    = discovery.relabel.pod_logs.output
+          forward_to = [loki.write.default.receiver]
+        }
+
+        loki.write "default" {
+          endpoint {
+            url = "http://loki-stack.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+          }
+        }
+
+  rbac:
+    create: true
+    clusterRules:
+      - apiGroups: [""]
+        resources: ["pods", "pods/log", "namespaces", "nodes"]
+        verbs: ["get", "list", "watch"]
+
+  # DaemonSet must run on every node, including the tainted k3s-dns and
+  # k3s-storage nodes (same broad toleration pattern as Longhorn/node-exporter).
+  controller:
+    tolerations:
+      - operator: Exists
+        effect: NoSchedule

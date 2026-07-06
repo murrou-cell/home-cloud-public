@@ -1,0 +1,6 @@
+chart: loki-stack
+chartVersion: HEAD
+namespace: monitoring
+releaseName: loki-stack
+repoUrl: https://github.com/murrou-cell/home-cloud
+syncWave: "3"

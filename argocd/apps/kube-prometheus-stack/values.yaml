@@ -1,0 +1,136 @@
+kube-prometheus-stack:
+  prometheusOperator:
+    nodeSelector:
+      kubernetes.io/hostname: k3s-worker
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+    admissionWebhooks:
+      patch:
+        nodeSelector:
+          kubernetes.io/hostname: k3s-worker
+
+  prometheus:
+    prometheusSpec:
+      retention: 5d
+      scrapeInterval: 30s
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker
+      resources:
+        requests:
+          cpu: 50m
+          memory: 200Mi
+        limits:
+          memory: 512Mi
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: longhorn
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 15Gi
+
+  alertmanager:
+    alertmanagerSpec:
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
+      storage:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: longhorn
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 2Gi
+    # Default chart config already ships a no-op 'null' receiver/route —
+    # left as-is until a real notification channel is decided.
+
+  kube-state-metrics:
+    nodeSelector:
+      kubernetes.io/hostname: k3s-worker
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 96Mi
+
+  # DaemonSet must run on every node (including tainted k3s-dns/k3s-storage) —
+  # no nodeSelector; chart's default toleration (NoSchedule/Exists) already
+  # covers this.
+  prometheus-node-exporter:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        memory: 32Mi
+
+  grafana:
+    nodeSelector:
+      kubernetes.io/hostname: k3s-worker
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        memory: 192Mi
+
+    # Tailscale ingress (tailnet-only, no funnel) replaces the chart's built-in
+    # ingress — see templates/ingress-tailscale.yaml
+    ingress:
+      enabled: false
+
+    # SSO-only login via Dex, matching the Argo CD / Argo Workflows convention —
+    # no local password login.
+    envValueFrom:
+      GF_AUTH_GENERIC_OAUTH_CLIENT_ID:
+        secretKeyRef:
+          name: grafana-oidc-secret
+          key: client-id
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
+        secretKeyRef:
+          name: grafana-oidc-secret
+          key: client-secret
+
+    grafana.ini:
+      server:
+        domain: grafana.<YOUR_TAILSCALE_DOMAIN>.ts.net
+        root_url: https://grafana.<YOUR_TAILSCALE_DOMAIN>.ts.net/
+      auth:
+        disable_login_form: true
+      auth.basic:
+        enabled: false
+      auth.generic_oauth:
+        enabled: true
+        name: Dex
+        allow_sign_up: true
+        scopes: "openid profile email groups"
+        auth_url: https://argo-cd.<YOUR_TAILSCALE_DOMAIN>.ts.net/api/dex/auth
+        token_url: http://argocd-server.argocd.svc.cluster.local/api/dex/token
+        api_url: http://argocd-server.argocd.svc.cluster.local/api/dex/userinfo
+        redirect_uri: https://grafana.<YOUR_TAILSCALE_DOMAIN>.ts.net/login/generic_oauth
+        # argocd-server redirects plain HTTP to HTTPS internally and its
+        # in-cluster TLS cert isn't in Grafana's trust store — same class of
+        # fix as oauth2-proxy's ssl-insecure-skip-verify for MinIO/Longhorn.
+        tls_skip_verify_insecure: true
+
+    # Loki datasource, alongside the chart's auto-provisioned Prometheus one.
+    additionalDataSources:
+      - name: Loki
+        uid: loki
+        type: loki
+        access: proxy
+        url: http://loki-stack.monitoring.svc.cluster.local:3100
+        jsonData:
+          timeout: 30

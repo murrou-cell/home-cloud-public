@@ -34,3 +34,29 @@ spec:
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
+      # Bitwarden-vault writes client-secret/cookie-secret keys into these
+      # Secrets out-of-band (PreSync, outside git). Without this, selfHeal
+      # treats those keys as drift from the git-declared manifest (which only
+      # defines client-id) and strips them back out on the app's next resync.
+      # These entries are static and shared across every generated
+      # Application; they're no-ops for apps that don't have a matching
+      # Secret name.
+      ignoreDifferences:
+        - group: ""
+          kind: Secret
+          name: oauth2-proxy-minio-secret
+          jsonPointers:
+            - /data/client-secret
+            - /data/cookie-secret
+        - group: ""
+          kind: Secret
+          name: oauth2-proxy-longhorn-secret
+          jsonPointers:
+            - /data/client-secret
+            - /data/cookie-secret
+        - group: ""
+          kind: Secret
+          name: oauth2-proxy-atlantis-secret
+          jsonPointers:
+            - /data/client-secret
+            - /data/cookie-secret

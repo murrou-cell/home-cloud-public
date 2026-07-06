@@ -1,0 +1,20 @@
+groups:
+  - name: argocd
+    rules:
+      - alert: ArgoCDAppNotSynced
+        expr: argocd_app_info{sync_status!="Synced"} == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Argo CD application {{ $labels.name }} has been OutOfSync for 15m"
+          description: "Application {{ $labels.name }} in project {{ $labels.project }} has sync_status={{ $labels.sync_status }}."
+
+      - alert: ArgoCDAppDegraded
+        expr: argocd_app_info{health_status="Degraded"} == 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Argo CD application {{ $labels.name }} is Degraded"
+          description: "Application {{ $labels.name }} in project {{ $labels.project }} has been Degraded for 10m."
