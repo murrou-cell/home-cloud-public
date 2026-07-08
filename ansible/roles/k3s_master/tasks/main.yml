@@ -20,6 +20,22 @@
   delay: 5
   changed_when: false
 
+# Adds the tailnet hostname as a TLS SAN so kubectl over Tailscale passes cert verification.
+- name: Configure additional TLS SAN for tailnet remote kubectl access
+  ansible.builtin.copy:
+    dest: /etc/rancher/k3s/config.yaml
+    mode: "0644"
+    content: |
+      tls-san:
+        - "k3s-api.<YOUR_TAILSCALE_HOST>.ts.net"
+  register: k3s_tls_san_config
+
+- name: Restart k3s to pick up new TLS SAN
+  ansible.builtin.systemd:
+    name: k3s
+    state: restarted
+  when: k3s_tls_san_config.changed
+
 - name: Read node-token
   ansible.builtin.slurp:
     src: /var/lib/rancher/k3s/server/node-token

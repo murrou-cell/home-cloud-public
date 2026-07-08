@@ -6,3 +6,6 @@ tailscale-operator:
     hostname: "home-cloud-operator"
     defaultTags:
       - "tag:k8s-operator"
+
+# Master IP for this wrapper chart's own templates/ (remote kubectl access) -- not shared with the Ansible role's TLS SAN value.
+k3sMasterIp: "<YOUR_IP>"

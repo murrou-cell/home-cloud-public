@@ -1,0 +1,73 @@
+# PostSync hook: Argo CD silently excludes EndpointSlice from sync, so this Job applies it imperatively instead.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: apply-k3s-api-endpointslice
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: apply-k3s-api-endpointslice
+  namespace: default
+rules:
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: apply-k3s-api-endpointslice
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: apply-k3s-api-endpointslice
+    namespace: default
+roleRef:
+  kind: Role
+  name: apply-k3s-api-endpointslice
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: apply-k3s-api-endpointslice
+  namespace: default
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 120
+  template:
+    spec:
+      serviceAccountName: apply-k3s-api-endpointslice
+      restartPolicy: Never
+      containers:
+        - name: apply
+          image: "ghcr.io/murrou-cell/bitwarden-vault:main"
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              cat <<EOF | kubectl apply -f -
+              apiVersion: discovery.k8s.io/v1
+              kind: EndpointSlice
+              metadata:
+                name: k3s-api-tailnet
+                namespace: default
+                labels:
+                  kubernetes.io/service-name: k3s-api-tailnet
+              addressType: IPv4
+              ports:
+                - name: k8s-api
+                  port: 6443
+                  protocol: TCP
+              endpoints:
+                - addresses:
+                    - "{{ .Values.k3sMasterIp }}"
+              EOF
+              echo "Applied. Current state:"
+              kubectl get endpointslice k3s-api-tailnet -n default -o wide

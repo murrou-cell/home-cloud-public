@@ -1,0 +1,17 @@
+# Tailnet-only L4 passthrough to the k3s API server; no selector since k3s's API server is a host process, not a Pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: k3s-api-tailnet
+  namespace: default
+  annotations:
+    tailscale.com/hostname: k3s-api
+    tailscale.com/tags: "tag:k8s-api"
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  ports:
+    - name: k8s-api
+      port: 6443
+      targetPort: 6443
+      protocol: TCP
