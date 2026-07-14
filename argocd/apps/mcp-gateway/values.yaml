@@ -1,0 +1,19 @@
+image:
+  # Built by .github/workflows/mcp-gateway.yml on push to main.
+  repository: ghcr.io/murrou-cell/mcp-gateway
+  tag: latest
+
+nodeSelector:
+  kubernetes.io/hostname: k3s-worker
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+# Same secret ntfy's provisioning init container reads - the gateway
+# authenticates to ntfy as the same write-only publisher user the
+# alertmanager-ntfy-bridge already uses.
+ntfyCredentialsSecret: ntfy-credentials

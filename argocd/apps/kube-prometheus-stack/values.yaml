@@ -57,6 +57,11 @@ kube-prometheus-stack:
     # translates the webhook into an ntfy publish call. No matching severity
     # falls through to the chart's default no-op receiver. Watchdog/
     # InfoInhibitor stay unrouted on purpose - they're meta-alerts.
+    # Part 13: critical/warning alerts also fan out to mcp-gateway (continue: true
+    # on those two routes, then a second matching route below) - triage-gated and
+    # investigated entirely by local llama.cpp, diagnosis posted to ntfy's pf-alerts-diagnosis
+    # topic. `info` is left out: chart-bundled low-priority noise isn't worth even
+    # the triage call.
     config:
       route:
         receiver: "null"
@@ -64,12 +69,17 @@ kube-prometheus-stack:
           - receiver: ntfy-critical
             matchers:
               - severity = critical
+            continue: true
           - receiver: ntfy-warning
             matchers:
               - severity = warning
+            continue: true
           - receiver: ntfy-info
             matchers:
               - severity = info
+          - receiver: mcp-gateway
+            matchers:
+              - severity =~ "critical|warning"
       receivers:
         - name: "null"
         - name: ntfy-critical
@@ -84,6 +94,10 @@ kube-prometheus-stack:
           webhook_configs:
             - url: http://alertmanager-ntfy-bridge.ntfy.svc.cluster.local/info
               send_resolved: true
+        - name: mcp-gateway
+          webhook_configs:
+            - url: http://mcp-gateway.ntfy.svc.cluster.local:8080/investigate
+              send_resolved: false
 
   kube-state-metrics:
     nodeSelector:

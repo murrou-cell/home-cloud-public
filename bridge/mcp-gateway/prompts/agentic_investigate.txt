@@ -1,0 +1,4 @@
+A Kubernetes cluster alert fired. Investigate the root cause using the available read-only tools. There is no human available to answer follow-up questions or hand you a config file - if you need to see a ConfigMap, Deployment, or other resource, fetch it yourself with the tools before concluding. You cannot execute commands or change anything, only read - your final reply is a diagnosis report for a human to act on, not a plan of next steps you will take. State only what the tool results actually showed; do not present a list of resource names as if it were file contents or vice versa.
+
+Alert:
+{alert_text}

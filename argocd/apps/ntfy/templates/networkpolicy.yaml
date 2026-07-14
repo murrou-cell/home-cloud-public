@@ -25,3 +25,10 @@ spec:
               app: alertmanager-ntfy-bridge
       ports:
         - port: 80
+    # mcp-gateway: publishes investigation diagnoses to pf-alerts-diagnosis.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: mcp-gateway
+      ports:
+        - port: 80

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cluster Assistant</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 640px;
+    margin: 3rem auto;
+    padding: 0 1rem;
+    line-height: 1.5;
+  }
+  h1 { font-size: 1.3rem; }
+  p.hint { opacity: 0.7; font-size: 0.9rem; }
+  form { display: flex; gap: 0.5rem; margin: 1.5rem 0; }
+  input[type=text] {
+    flex: 1;
+    padding: 0.6rem 0.8rem;
+    font-size: 1rem;
+    border-radius: 0.4rem;
+    border: 1px solid #8888;
+  }
+  button {
+    padding: 0.6rem 1.2rem;
+    font-size: 1rem;
+    border-radius: 0.4rem;
+    border: none;
+    background: #3b6ef6;
+    color: white;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #answer {
+    white-space: pre-wrap;
+    padding: 1rem;
+    border-radius: 0.4rem;
+    background: #80808018;
+    min-height: 2rem;
+  }
+  .examples { font-size: 0.85rem; opacity: 0.7; margin-top: 0.5rem; }
+</style>
+</head>
+<body>
+  <h1>Cluster Assistant</h1>
+  <p class="hint">
+    Ask about a specific pod, node/host, PVC, Argo CD Application, or
+    Deployment/DaemonSet/StatefulSet/Job/PodDisruptionBudget - by name.
+    Answers are grounded in live evidence fetched from the cluster, not
+    invented by the model.
+  </p>
+  <form id="ask-form">
+    <input id="question" type="text" placeholder="why is loki crashlooping in monitoring?" autocomplete="off" />
+    <button id="submit" type="submit">Ask</button>
+  </form>
+  <div id="answer"></div>
+  <p class="examples">
+    Examples: "is k3s-worker healthy?" &middot; "is storage-loki-stack-0 pvc full?"
+    &middot; "why is the root argocd app degraded?"
+  </p>
+
+<script>
+const form = document.getElementById("ask-form");
+const input = document.getElementById("question");
+const button = document.getElementById("submit");
+const answer = document.getElementById("answer");
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const question = input.value.trim();
+  if (!question) return;
+
+  button.disabled = true;
+  answer.textContent = "Thinking... (this can take up to ~30s)";
+
+  try {
+    const resp = await fetch("/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    if (!resp.ok) {
+      answer.textContent = `Request failed (${resp.status}).`;
+      return;
+    }
+    const data = await resp.json();
+    answer.textContent = data.answer;
+  } catch (err) {
+    answer.textContent = "Request failed: " + err;
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

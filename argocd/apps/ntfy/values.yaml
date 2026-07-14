@@ -23,6 +23,7 @@ topics:
   - pf-alerts-critical
   - pf-alerts-warning
   - pf-alerts-info
+  - pf-alerts-diagnosis
 
 # Written by bitwarden-vault (PreSync): adminpassword, publisherpassword.
 credentialsSecret: ntfy-credentials

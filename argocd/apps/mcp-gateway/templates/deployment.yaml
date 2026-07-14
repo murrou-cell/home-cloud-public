@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-gateway
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-gateway
+  template:
+    metadata:
+      labels:
+        app: mcp-gateway
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 8080
+          env:
+            # Python stdout is block-buffered when not attached to a tty -
+            # without this, kubectl logs shows nothing until the buffer fills.
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: NTFY_URL
+              value: "http://ntfy.ntfy.svc.cluster.local"
+            - name: NTFY_PUBLISHER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ntfyCredentialsSecret }}
+                  key: publisherpassword
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            timeoutSeconds: 5
+            periodSeconds: 15
+          # /readyz gates on warm_up() completing its cross-node ping to
+          # llamacpp (k3s-worker -> k3s-gpu) - generous failureThreshold since
+          # that can legitimately take up to ~60s on a fresh pod; this only
+          # delays traffic routing, never restarts the container (that's
+          # livenessProbe's job, deliberately kept on the always-200 path).
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            timeoutSeconds: 5
+            periodSeconds: 5
+            failureThreshold: 20

@@ -1,0 +1,1 @@
+You've only used {tool_call_count} tool call(s) so far. That's not enough to verify this - use at least {min_tool_calls} total (e.g. resources_get on the actual ConfigMap/Deployment involved) before concluding. There is no human to ask, look it up yourself.

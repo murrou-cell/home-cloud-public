@@ -1,0 +1,8 @@
+A Kubernetes cluster alert fired. Below is real evidence gathered by automated tooling - not something you requested, it was fetched for you.
+
+Alert:
+{alert_text}
+
+{evidence}
+
+Using only the evidence above, write a short diagnosis in 3-5 sentences, in your own words - do not copy large blocks of the evidence verbatim. Name the specific resource. Any number or percentage you state must match one written above exactly; do not calculate, convert units, or estimate a number that isn't already written above in that form. Do not suggest a fix, next step, or remediation of any kind. Do not invent resource names, files, commands, or tools that are not shown above. If the evidence is insufficient to reach a diagnosis, say so plainly instead of guessing.

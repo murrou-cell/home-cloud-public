@@ -1,0 +1,6 @@
+chart: mcp-gateway
+chartVersion: HEAD
+namespace: ntfy
+releaseName: mcp-gateway
+repoUrl: https://github.com/murrou-cell/home-cloud
+syncWave: "2"
