@@ -1,0 +1,45 @@
+---
+# Raw hostpci `id=` passthrough requires root username/password auth in the
+# proxmox provider; our Terraform runs as the least-privileged terraform@pve
+# API token, which can only reference PCI devices via a named cluster
+# resource mapping (`mapping=` in hostpci) -- hence this indirection.
+- name: Get existing PCI resource mappings
+  ansible.builtin.command: pvesh get /cluster/mapping/pci --output-format json
+  register: pci_mappings_raw
+  changed_when: false
+  failed_when: false
+
+- name: Parse existing PCI resource mapping IDs
+  ansible.builtin.set_fact:
+    pci_mapping_ids: "{{ (pci_mappings_raw.stdout | default('[]') | from_json | default([])) | map(attribute='id') | list }}"
+
+# iommugroup and subsystem-id are both required -- Proxmox fingerprints
+# mapped devices with them to detect hardware changes, and refuses to start
+# a VM referencing a mapping that omits either.
+- name: Create PCI resource mapping for RX 580 VGA function
+  ansible.builtin.command: >
+    pvesh create /cluster/mapping/pci
+    --id {{ gpu_pci_mapping_vga_id }}
+    --map node={{ gpu_pci_mapping_node }},path={{ gpu_pci_mapping_vga_path }},id={{ gpu_pci_mapping_vga_device_id }},iommugroup={{ gpu_pci_mapping_iommu_group }},subsystem-id={{ gpu_pci_mapping_vga_subsystem_id }}
+    --description "RX 580 VGA function for llama.cpp GPU passthrough"
+  when: gpu_pci_mapping_vga_id not in pci_mapping_ids
+
+- name: Create PCI resource mapping for RX 580 HDMI audio function
+  ansible.builtin.command: >
+    pvesh create /cluster/mapping/pci
+    --id {{ gpu_pci_mapping_audio_id }}
+    --map node={{ gpu_pci_mapping_node }},path={{ gpu_pci_mapping_audio_path }},id={{ gpu_pci_mapping_audio_device_id }},iommugroup={{ gpu_pci_mapping_iommu_group }},subsystem-id={{ gpu_pci_mapping_audio_subsystem_id }}
+    --description "RX 580 HDMI audio function for llama.cpp GPU passthrough"
+  when: gpu_pci_mapping_audio_id not in pci_mapping_ids
+
+- name: Grant terraform@pve Mapping.Use on the VGA mapping
+  ansible.builtin.command: >
+    pveum aclmod /mapping/pci/{{ gpu_pci_mapping_vga_id }}
+    -user terraform@pve -role TerraformRole
+  changed_when: false
+
+- name: Grant terraform@pve Mapping.Use on the audio mapping
+  ansible.builtin.command: >
+    pveum aclmod /mapping/pci/{{ gpu_pci_mapping_audio_id }}
+    -user terraform@pve -role TerraformRole
+  changed_when: false

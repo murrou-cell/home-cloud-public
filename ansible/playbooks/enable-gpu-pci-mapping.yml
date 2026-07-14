@@ -1,0 +1,6 @@
+---
+- name: Register RX 580 PCI resource mappings and grant terraform@pve access
+  hosts: pve
+  become: true
+  roles:
+    - proxmox_gpu_pci_mapping

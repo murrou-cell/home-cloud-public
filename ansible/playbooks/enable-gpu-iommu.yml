@@ -1,0 +1,6 @@
+---
+- name: Enable IOMMU on the primary Proxmox host for GPU passthrough
+  hosts: pve
+  become: true
+  roles:
+    - proxmox_gpu_iommu

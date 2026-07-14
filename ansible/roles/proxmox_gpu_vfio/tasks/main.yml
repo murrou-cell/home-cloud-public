@@ -1,0 +1,46 @@
+---
+- name: Load vfio modules at boot
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/vfio-pci.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      vfio
+      vfio_iommu_type1
+      vfio_pci
+  notify: update initramfs
+
+# ids= is scoped to the RX 580's own PCI IDs (VGA + HDMI audio functions),
+# so this doesn't touch the onboard Starship/Matisse audio controller which
+# also uses snd_hda_intel.
+- name: Bind GPU to vfio-pci before amdgpu/snd_hda_intel can claim it
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/vfio-gpu-passthrough.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      options vfio-pci ids={{ gpu_vfio_pci_ids }}
+      softdep amdgpu pre: vfio-pci
+      softdep snd_hda_intel pre: vfio-pci
+  notify: update initramfs
+
+# No integrated GPU on this host (Ryzen 3 3100 has no iGPU), so amdgpu has
+# nothing else to drive -- safe to blacklist outright.
+- name: Blacklist amdgpu
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/blacklist-amdgpu.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: "blacklist amdgpu\n"
+  notify: update initramfs
+
+- name: Flush handlers so initramfs is rebuilt before any reboot
+  ansible.builtin.meta: flush_handlers
+
+- name: Reboot host to bind GPU to vfio-pci
+  ansible.builtin.reboot:
+    reboot_timeout: 300
+  when: gpu_vfio_reboot | bool

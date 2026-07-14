@@ -1,0 +1,11 @@
+---
+gpu_pci_mapping_node: home
+gpu_pci_mapping_iommu_group: 2
+gpu_pci_mapping_vga_id: gpu-rx580-vga
+gpu_pci_mapping_vga_path: "0000:07:00.0"
+gpu_pci_mapping_vga_device_id: "1002:67df"
+gpu_pci_mapping_vga_subsystem_id: "1043:0501"
+gpu_pci_mapping_audio_id: gpu-rx580-audio
+gpu_pci_mapping_audio_path: "0000:07:00.1"
+gpu_pci_mapping_audio_device_id: "1002:aaf0"
+gpu_pci_mapping_audio_subsystem_id: "1043:aaf0"

@@ -1,0 +1,9 @@
+---
+# Pinned to a specific commit rather than the v0.1.0 tag: that tag's
+# ftrace.c predates the kernel's switch to struct ftrace_regs in its
+# callback signature and fails to build against this host's kernel. The
+# unreleased 0.1.1 (this commit) added compat shims for newer kernels.
+vendor_reset_version: "0.1.1"
+vendor_reset_git_ref: "cbb4dd50926337e0f9fe1dd1e8a74aa5cb3448a7"
+vendor_reset_repo: "https://github.com/gnif/vendor-reset.git"
+vendor_reset_src_dir: "/usr/src/vendor-reset-{{ vendor_reset_version }}"

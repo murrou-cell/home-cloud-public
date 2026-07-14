@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  role_name: proxmox_gpu_vendor_reset
+  description: Builds and loads the vendor-reset DKMS module so AMD Polaris/Vega GPUs can be reset cleanly between VFIO passthrough VM sessions
+  min_ansible_version: "2.14"
+
+dependencies: []

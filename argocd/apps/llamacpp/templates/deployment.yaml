@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llamacpp
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llamacpp
+  template:
+    metadata:
+      labels:
+        app: llamacpp
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: llama-server
+          image: "{{ .Values.image.repository }}@{{ .Values.image.digest }}"
+          args:
+            - "--hf-repo"
+            - "{{ .Values.model.hfRepo }}"
+            - "--hf-file"
+            - "{{ .Values.model.hfFile }}"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8080"
+            - "--n-gpu-layers"
+            - "{{ .Values.gpuLayers }}"
+          env:
+            - name: LLAMA_CACHE
+              value: /models
+          ports:
+            - containerPort: 8080
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          # Render node access needs the device cgroup opened up -- hostPath
+          # alone isn't enough, EPERM persists even as root without this.
+          securityContext:
+            privileged: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 15
+          volumeMounts:
+            - name: dri
+              mountPath: /dev/dri
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: dri
+          hostPath:
+            path: /dev/dri
+        - name: models
+          persistentVolumeClaim:
+            claimName: llamacpp-models

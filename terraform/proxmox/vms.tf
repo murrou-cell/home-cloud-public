@@ -59,17 +59,26 @@ locals {
       bootstrap_ansible = true
       node_type         = "dns"
     }
-    k3s-storage = {
+    k3s-gpu = {
       vm_id             = 106
-      description       = "Dedicated storage node — MinIO data on local-path; Longhorn target when second Proxmox node added"
+      description       = "GPU-passthrough worker — RX 580 for llama.cpp (Vulkan backend), Claude cost-gate model"
       cores             = 2
-      memory_mb         = 2048
-      disk_size         = 20
+      memory_mb         = 7168
+      disk_size         = 32
       ip_address        = "dhcp"
       bootstrap_ansible = true
-      node_type         = "storage"
-      extra_disks = [
-        { size = 200, interface = "virtio1" }
+      node_type         = "worker"
+      machine           = "q35"
+      # Raw hostpci `id=` requires root username/password auth; the
+      # least-privileged terraform@pve API token can only reference PCI
+      # devices via cluster resource mappings (see proxmox_gpu_pci_mapping).
+      # rombar=false: this VM only needs the GPU for headless compute
+      # (Vulkan), never its video output, and exposing the ROM made SeaBIOS
+      # hang executing the card's video BIOS during POST (silent console,
+      # pegged vCPU, no DHCP lease -- never reached the OS at all).
+      hostpci = [
+        { mapping = "gpu-rx580-vga", pcie = true, rombar = false },
+        { mapping = "gpu-rx580-audio", pcie = true, rombar = false }
       ]
     }
   }
@@ -82,6 +91,7 @@ resource "proxmox_virtual_environment_vm" "vms" {
   description = each.value.description
   node_name   = try(each.value.node_name, var.proxmox_node)
   vm_id       = each.value.vm_id
+  machine     = try(each.value.machine, null)
 
   clone {
     vm_id = try(each.value.template_id, var.vm_template_id)
@@ -114,6 +124,17 @@ resource "proxmox_virtual_environment_vm" "vms" {
       interface    = disk.value.interface
       iothread     = true
       discard      = "on"
+    }
+  }
+
+  dynamic "hostpci" {
+    for_each = { for idx, pci in try(each.value.hostpci, []) : idx => pci }
+    content {
+      device  = "hostpci${hostpci.key}"
+      id      = try(hostpci.value.id, null)
+      mapping = try(hostpci.value.mapping, null)
+      pcie    = try(hostpci.value.pcie, true)
+      rombar  = try(hostpci.value.rombar, true)
     }
   }
 

@@ -1,0 +1,3 @@
+---
+gpu_iommu_cmdline_extra: "iommu=pt"
+gpu_iommu_reboot: true

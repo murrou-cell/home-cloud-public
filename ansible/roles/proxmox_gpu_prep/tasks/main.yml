@@ -1,0 +1,38 @@
+---
+# Scoped to making the GPU itself usable on this node -- the actual
+# workload that uses it (llama.cpp) is Argo CD-managed, not Ansible.
+- name: Install amdgpu kernel module package
+  ansible.builtin.apt:
+    name: "linux-modules-extra-{{ ansible_kernel }}"
+    state: present
+    update_cache: true
+
+- name: Install linux-firmware for Polaris GPU firmware blobs
+  ansible.builtin.apt:
+    name: linux-firmware
+    state: present
+
+- name: Load amdgpu
+  community.general.modprobe:
+    name: amdgpu
+    state: present
+
+- name: Install Vulkan runtime and verification tools
+  ansible.builtin.apt:
+    name:
+      - mesa-vulkan-drivers
+      - vulkan-tools
+    state: present
+
+# Confirms the RADV ICD actually sees the passed-through GPU -- a silent
+# driver/firmware mismatch here is much more confusing to debug once it's
+# surfacing as a k8s pod stuck in a crash loop instead.
+- name: Verify Vulkan sees the GPU
+  ansible.builtin.command: vulkaninfo --summary
+  register: vulkaninfo_result
+  changed_when: false
+
+- name: Fail early if no AMD Vulkan device is visible
+  ansible.builtin.fail:
+    msg: "vulkaninfo did not report an AMD device -- check amdgpu binding and firmware install"
+  when: "'AMD' not in vulkaninfo_result.stdout"

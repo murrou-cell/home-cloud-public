@@ -1,0 +1,6 @@
+---
+- name: Free the RX 580 from the host for GPU passthrough
+  hosts: pve
+  become: true
+  roles:
+    - proxmox_gpu_vfio

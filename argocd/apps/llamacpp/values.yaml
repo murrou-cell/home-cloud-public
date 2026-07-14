@@ -1,0 +1,27 @@
+# ggml-org stopped publishing per-build-numbered vulkan tags (server-vulkan
+# is the only remaining tag for this variant) -- pinned by digest instead,
+# same reproducibility goal as pinning llama.cpp source to b9938 on the
+# systemd-based k3s-gpu install this replaces.
+image:
+  repository: ghcr.io/ggml-org/llama.cpp
+  digest: sha256:d4dee3c79f02938835710dd6892ceb9808556df5829142493281fc4a68b36458
+
+nodeSelector:
+  kubernetes.io/hostname: k3s-gpu
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
+
+model:
+  hfRepo: Qwen/Qwen2.5-0.5B-Instruct-GGUF
+  hfFile: qwen2.5-0.5b-instruct-q4_k_m.gguf
+
+gpuLayers: 999
+
+persistence:
+  size: 2Gi
+  storageClass: longhorn

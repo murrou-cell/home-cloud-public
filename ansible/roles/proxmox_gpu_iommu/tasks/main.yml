@@ -1,0 +1,29 @@
+---
+# amd_iommu=on isn't a real AMD-Vi driver option (dmesg logs "Unknown option
+# - 'on'"); AMD IOMMU auto-enables once the BIOS/UEFI exposes it. Strips any
+# copy of that token left over from earlier guides/attempts.
+- name: Remove invalid amd_iommu=on token from GRUB cmdline
+  ansible.builtin.replace:
+    path: /etc/default/grub
+    regexp: '(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*?) ?amd_iommu=on([^"]*")'
+    replace: '\1\2'
+    backup: true
+  notify: update grub
+
+# Negative lookahead in the captured group makes this idempotent: the regexp
+# only matches (and thus only replaces) when the extra cmdline isn't already present.
+- name: Add IOMMU parameters to GRUB cmdline
+  ansible.builtin.replace:
+    path: /etc/default/grub
+    regexp: '^GRUB_CMDLINE_LINUX_DEFAULT="((?:(?!{{ gpu_iommu_cmdline_extra | regex_escape }}).)*)"$'
+    replace: 'GRUB_CMDLINE_LINUX_DEFAULT="\1 {{ gpu_iommu_cmdline_extra }}"'
+    backup: true
+  notify: update grub
+
+- name: Flush handlers so grub.cfg is regenerated before any reboot
+  ansible.builtin.meta: flush_handlers
+
+- name: Reboot host to activate IOMMU
+  ansible.builtin.reboot:
+    reboot_timeout: 300
+  when: gpu_iommu_reboot | bool

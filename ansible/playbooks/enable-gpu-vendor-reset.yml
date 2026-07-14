@@ -1,0 +1,6 @@
+---
+- name: Install vendor-reset for reliable RX 580 passthrough resets
+  hosts: pve
+  become: true
+  roles:
+    - proxmox_gpu_vendor_reset

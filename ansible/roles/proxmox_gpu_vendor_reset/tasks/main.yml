@@ -1,0 +1,56 @@
+---
+# Consumer AMD Polaris/Vega GPUs (RX 580 included) don't support a clean FLR
+# or bus reset, so re-attaching one via VFIO after a prior session leaves it
+# wedged -- the guest hangs hard trying to init it. vendor-reset hooks
+# pci_dev_specific_reset via ftrace to supply a working reset path for these
+# cards, so VMs can be stopped/started repeatedly without a host reboot.
+- name: Install DKMS build prerequisites
+  ansible.builtin.apt:
+    name:
+      - dkms
+      - git
+      - build-essential
+      - "proxmox-headers-{{ ansible_kernel }}"
+    state: present
+
+- name: Check current DKMS status for vendor-reset
+  ansible.builtin.command: dkms status -m vendor-reset -v {{ vendor_reset_version }}
+  register: vendor_reset_dkms_status
+  changed_when: false
+  failed_when: false
+
+- name: Clone vendor-reset source
+  ansible.builtin.git:
+    repo: "{{ vendor_reset_repo }}"
+    dest: "{{ vendor_reset_src_dir }}"
+    version: "{{ vendor_reset_git_ref }}"
+  when: "'installed' not in vendor_reset_dkms_status.stdout"
+
+- name: Register vendor-reset with DKMS
+  ansible.builtin.command: dkms add -m vendor-reset -v {{ vendor_reset_version }}
+  when: "'installed' not in vendor_reset_dkms_status.stdout and 'added' not in vendor_reset_dkms_status.stdout"
+
+- name: Build and install vendor-reset via DKMS
+  ansible.builtin.command: dkms install -m vendor-reset -v {{ vendor_reset_version }}
+  when: "'installed' not in vendor_reset_dkms_status.stdout"
+
+# Named to sort before vfio-pci.conf (systemd-modules-load.service processes
+# /etc/modules-load.d/*.conf in lexicographic filename order) so the reset
+# hook is registered before the GPU is bound to vfio-pci at boot.
+- name: Load vendor-reset at boot, before vfio-pci
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/vendor-reset.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      vendor-reset
+  notify: update initramfs
+
+- name: Flush handlers so initramfs includes vendor-reset
+  ansible.builtin.meta: flush_handlers
+
+- name: Load vendor-reset now
+  community.general.modprobe:
+    name: vendor-reset
+    state: present

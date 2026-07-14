@@ -1,0 +1,6 @@
+---
+- name: Prepare the passed-through GPU on k3s-gpu
+  hosts: k3s-gpu
+  become: true
+  roles:
+    - proxmox_gpu_prep

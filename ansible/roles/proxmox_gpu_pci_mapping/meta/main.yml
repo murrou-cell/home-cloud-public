@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  role_name: proxmox_gpu_pci_mapping
+  description: Registers the RX 580's two PCI functions as cluster resource mappings so the least-privileged terraform@pve token can reference them in hostpci blocks
+  min_ansible_version: "2.14"
+
+dependencies: []

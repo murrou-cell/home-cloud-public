@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  role_name: proxmox_gpu_prep
+  description: Installs kernel modules, firmware, and Vulkan runtime needed for a passed-through AMD GPU to work inside a k3s node
+  min_ansible_version: "2.14"
+
+dependencies: []
