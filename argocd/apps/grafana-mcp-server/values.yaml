@@ -1,0 +1,86 @@
+grafana-mcp:
+  grafana:
+    url: "http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local:80"
+    # Bitwarden item: bitwarden-vault/grafana-mcp-server/grafana-mcp-credentials
+    apiKeySecret:
+      name: grafana-mcp-credentials
+      key: api-key
+
+  # Grafana is SSO-only (Dex) with no local admin login - this server only
+  # ever reads dashboards/datasources on behalf of mcp-gateway's playbooks,
+  # never writes. NOTE: chart 0.18.1's args: block only renders when debug,
+  # metrics.enabled, disabledCategories, or extraArgs is set - disableWrite
+  # alone (without this workaround) is silently a no-op, since it's excluded
+  # from that condition and the flag would never reach the container.
+  #
+  # -t/-transport: confirmed live the image's own entrypoint launches with
+  # -t sse by default (not the "stdio" default --help reports for the flag
+  # itself) - mcp-gateway speaks streamable-http, not SSE, and got a bare
+  # 403 against /mcp until this was set explicitly.
+  # -allowed-hosts "*": defaults to loopback variants of -address, which
+  # rejects every real request here since it always arrives via the
+  # cluster-DNS Service name, never localhost.
+  extraArgs:
+    - --disable-write
+    - -t=streamable-http
+    - -allowed-hosts=*
+
+  # Confirmed live: the full default toolset (52 tools) plus
+  # kubernetes-mcp-server's 13 and proxmox-mcp's 5 - merged for the agentic
+  # fallback in bridge/mcp-gateway/agentic.py - is 17,328 tokens, more than
+  # double llama.cpp's 8192-token context (argocd/apps/llamacpp/), and every
+  # agentic-fallback investigation failed outright with a 400 from llama.cpp
+  # until this was cut down. First pass (dropping everything but search/
+  # dashboard/datasource/prometheus/loki) still left 39 tools / 9,592 tokens
+  # - still over budget with zero room left for the actual conversation.
+  # Also missed graphite the first time (not "disabled by default" upstream,
+  # unlike the ones this cluster genuinely never uses). Second pass (also
+  # dropping dashboard - pvc.py's only current use is search_dashboards,
+  # which is its own "search" category, not "dashboard") landed at 35 tools
+  # / 8,762 tokens - still over the 8192 limit with zero room for the actual
+  # conversation even if it had fit. Deliberately not bumping llama.cpp's
+  # ctx-size instead: the RX 580 only has 4GB VRAM, already fully committed
+  # to the running model, and there's no verified headroom to test that
+  # safely against a resource every other alert investigation also depends
+  # on. Third pass drops loki too, leaving just search/datasource/prometheus
+  # for the agentic fallback's merged tool list - individual playbooks that
+  # want Loki evidence can still open their own dedicated Grafana session
+  # and call it directly, same pattern pvc.py/host.py already use.
+  disabledCategories:
+    - admin
+    - alerting
+    - annotations
+    - api
+    - asserts
+    - config
+    - dashboard
+    - folder
+    - graphite
+    - incident
+    - loki
+    - navigation
+    - oncall
+    - plugin
+    - provisioning
+    - proxied
+    - pyroscope
+    - rendering
+    - sift
+    - snapshot
+
+  service:
+    port: 8000
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 96Mi
+
+  # Cluster-internal only - the gateway reaches it over the Service.
+  ingress:
+    enabled: false
+
+  nodeSelector:
+    kubernetes.io/hostname: k3s-worker

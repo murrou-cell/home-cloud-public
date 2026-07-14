@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxmox-mcp
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: proxmox-mcp
+  template:
+    metadata:
+      labels:
+        app: proxmox-mcp
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: proxmox-mcp
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: PROXMOX_API_URL
+              value: {{ .Values.proxmoxApiUrl | quote }}
+            - name: PROXMOX_TOKEN_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.proxmoxCredentialsSecret }}
+                  key: token-id
+            - name: PROXMOX_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.proxmoxCredentialsSecret }}
+                  key: token-secret
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # FastMCP's streamable-http app only exposes /mcp - no dedicated
+          # health path - so probes check the port is accepting connections
+          # rather than a specific HTTP route.
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            timeoutSeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            timeoutSeconds: 5
+            periodSeconds: 5

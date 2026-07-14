@@ -1,0 +1,6 @@
+chart: kubernetes-mcp-server
+chartVersion: HEAD
+namespace: kubernetes-mcp-server
+releaseName: kubernetes-mcp-server
+repoUrl: https://github.com/murrou-cell/home-cloud
+syncWave: "1"

@@ -1,0 +1,6 @@
+chart: proxmox-mcp
+chartVersion: HEAD
+namespace: proxmox-mcp
+releaseName: proxmox-mcp
+repoUrl: https://github.com/murrou-cell/home-cloud
+syncWave: "1"

@@ -1,0 +1,56 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kubernetes-mcp-server
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kubernetes-mcp-server
+      app.kubernetes.io/instance: kubernetes-mcp-server
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        # mcp-gateway lives in the ntfy namespace, reusing ntfy-credentials
+        # rather than duplicating that secret into a namespace of its own.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ntfy
+          podSelector:
+            matchLabels:
+              app: mcp-gateway
+      ports:
+        - port: 8080
+    - from:
+        # claude-playbook-agent's dry run (see agent.py's dry_run_investigate) - same read-only
+        # access mcp-gateway already has, just from a second, ephemeral caller.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argo-workflows
+          podSelector:
+            matchLabels:
+              app: claude-playbook-agent
+      ports:
+        - port: 8080
+  egress:
+    # k3s runs the apiserver on the master's host network, not as a Pod -
+    # can't select it, so this is an ipBlock to the real node IP.
+    - to:
+        - ipBlock:
+            cidr: <YOUR_K3S_MASTER_IP>/32
+      ports:
+        - port: 6443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

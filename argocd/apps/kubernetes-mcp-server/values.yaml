@@ -1,0 +1,91 @@
+kubernetes-mcp-server:
+  image:
+    version: v0.0.63
+
+  # HTTP transport at /mcp, no stdio - the gateway reaches this over the
+  # cluster network, it doesn't spawn the server as a subprocess.
+  config:
+    port: "{{ .Values.service.port }}"
+    read_only: true
+
+  # Chart ships zero RBAC by default (rbac.create only wires up whatever's
+  # listed here) - this ClusterRole is deliberately get/list/watch only,
+  # no secrets, so a compromised or misbehaving gateway can't exfiltrate
+  # credentials or mutate anything even before read_only is considered.
+  rbac:
+    extraClusterRoles:
+      - name: readonly
+        rules:
+          - apiGroups: [""]
+            resources:
+              - pods
+              - pods/log
+              - pods/status
+              - services
+              - endpoints
+              - events
+              - namespaces
+              - nodes
+              - configmaps
+              - persistentvolumeclaims
+              - persistentvolumes
+              - replicationcontrollers
+            verbs: ["get", "list", "watch"]
+          # nodes/proxy: kubelet's stats/summary endpoint, backs nodes_stats_summary.
+          # metrics.k8s.io: metrics-server readings, backs nodes_top/pods_top.
+          # Both get/list only - no exec/log/portforward proxy subresources.
+          - apiGroups: [""]
+            resources: ["nodes/proxy"]
+            verbs: ["get"]
+          - apiGroups: ["metrics.k8s.io"]
+            resources: ["nodes", "pods"]
+            verbs: ["get", "list"]
+          - apiGroups: ["apps"]
+            resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+            verbs: ["get", "list", "watch"]
+          - apiGroups: ["batch"]
+            resources: ["jobs", "cronjobs"]
+            verbs: ["get", "list", "watch"]
+          - apiGroups: ["networking.k8s.io"]
+            resources: ["ingresses", "networkpolicies"]
+            verbs: ["get", "list", "watch"]
+          # Backs the longhorn_setting /ask playbook (bridge/mcp-gateway/playbooks/longhorn_setting.py) -
+          # get/list/watch only, same as everything else here. Add other Longhorn kinds (volumes,
+          # engineimages, etc.) only once a merged playbook actually needs them.
+          - apiGroups: ["longhorn.io"]
+            resources: ["settings"]
+            verbs: ["get", "list", "watch"]
+          - apiGroups: ["events.k8s.io"]
+            resources: ["events"]
+            verbs: ["get", "list", "watch"]
+          - apiGroups: ["argoproj.io"]
+            resources: ["applications"]
+            verbs: ["get", "list", "watch"]
+          # Argo Workflows run status (ansible-runner bootstrap/drain jobs) -
+          # previously invisible to the gateway; get/list/watch only, same
+          # as everything else here.
+          - apiGroups: ["argoproj.io"]
+            resources: ["workflows", "workflowtemplates", "cronworkflows"]
+            verbs: ["get", "list", "watch"]
+          - apiGroups: ["policy"]
+            resources: ["poddisruptionbudgets"]
+            verbs: ["get", "list", "watch"]
+    extraClusterRoleBindings:
+      - name: readonly
+        roleRef:
+          name: readonly
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 96Mi
+
+  # Cluster-internal only - the gateway reaches it over the Service, no
+  # tailnet/ingress exposure needed.
+  ingress:
+    enabled: false
+
+  nodeSelector:
+    kubernetes.io/hostname: k3s-worker

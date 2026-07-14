@@ -1,0 +1,22 @@
+image:
+  # Built by .github/workflows/proxmox-mcp.yml on push to main.
+  repository: ghcr.io/murrou-cell/proxmox-mcp
+  tag: latest
+
+nodeSelector:
+  kubernetes.io/hostname: k3s-worker
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 96Mi
+
+# Proxmox host "home" (<YOUR_PROXMOX_HOST_IP>) - the pve node, not pve2 - is the one
+# the mcp-readonly@pve token was issued against; Proxmox users/roles/tokens
+# are cluster-wide, so this single token authenticates against either node's
+# API, but the URL itself has to point at one specific host's management IP.
+# Bitwarden item: bitwarden-vault/proxmox-mcp/proxmox-mcp-credentials
+proxmoxApiUrl: "https://<YOUR_PROXMOX_HOST_IP>:8006"
+proxmoxCredentialsSecret: proxmox-mcp-credentials

@@ -1,0 +1,42 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: proxmox-mcp
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: proxmox-mcp
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ntfy
+          podSelector:
+            matchLabels:
+              app: mcp-gateway
+      ports:
+        - port: 8080
+    - from:
+        # claude-playbook-agent's dry run (see agent.py's dry_run_investigate) - same read-only
+        # access mcp-gateway already has, just from a second, ephemeral caller.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argo-workflows
+          podSelector:
+            matchLabels:
+              app: claude-playbook-agent
+      ports:
+        - port: 8080
+  egress:
+    # Proxmox isn't a cluster Service - ipBlock to the real host IP. Uses
+    # the IP directly (no in-cluster DNS name), so no kube-dns egress rule
+    # is needed here.
+    - to:
+        - ipBlock:
+            cidr: <YOUR_PROXMOX_HOST_IP>/32
+      ports:
+        - port: 8006
