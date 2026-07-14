@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
-"""Alert-triggered cluster investigation.
-
-Receives the same Alertmanager webhook payload the ntfy bridge gets, asks
-llama.cpp a one-word triage question (worth investigating or not), and for
-anything flagged ESCALATE, dispatches to investigate.run() - a deterministic
-playbook (playbooks/) if the alert shape matches one, otherwise agentic.py's
-open-ended tool-use loop. Diagnosis is posted to ntfy. Entirely local: no
-external API, no cost. See playbooks/__init__.py for how to add a new alert
-shape, and prompts/ for the actual model instructions.
-"""
+"""Alert-triggered cluster investigation: triage via llama.cpp, then a deterministic playbook or agentic.py's fallback, posted to ntfy."""
 import asyncio
 import base64
+import contextlib
 import json
 import os
 import threading
@@ -19,23 +11,30 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from common import LLAMACPP_URL, chat_completion, load_prompt, urlopen_with_retry
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
-# Read once at import time, not per-request - the file is small and static,
-# no reason to hit the filesystem on every GET /. Not loaded via
-# common.load_prompt(): that calls str.format() on the file contents, which
-# would choke on every literal {} in the page's own CSS/JS (same class of
-# bug already hit once with intent_classify.txt's JSON example).
+import claude_ask
+from common import (
+    GRAFANA_MCP_URL,
+    K8S_MCP_URL,
+    LLAMACPP_URL,
+    PROXMOX_MCP_URL,
+    call_tool_text,
+    chat_completion,
+    load_prompt,
+    submit_workflow,
+    urlopen_with_retry,
+)
+
+# Read once at import time; not loaded via load_prompt() since that does str.format() and breaks on the page's own {}.
 ASK_UI_HTML = (Path(__file__).parent / "static" / "index.html").read_text()
+from investigate import open_optional_session
 from investigate import run as run_investigation
 from investigate import run_direct
-from playbooks import argocd, host, pod, pvc, workload
+from playbooks import argocd, grafana, host, list_resource, pod, proxmox, pvc, workload
 
-# question intent -> (playbook module, required fields, apiVersion/kind lookup
-# for the "workload" intent only). Kept separate from playbooks/__init__.py's
-# PLAYBOOKS list since that's for alert-shape dispatch (extract_target from
-# Alertmanager labels) - this is question-shape dispatch (from intent
-# classification), a different target-building path into the same playbooks.
+# kind -> apiVersion for the "workload" /ask intent; separate from playbooks/__init__.py's alert-shape dispatch.
 WORKLOAD_KIND_API_VERSIONS = {
     "Deployment": "apps/v1",
     "DaemonSet": "apps/v1",
@@ -49,15 +48,42 @@ NTFY_USER = os.environ.get("NTFY_PUBLISHER_USER", "ntfy-publisher")
 NTFY_PASSWORD = os.environ["NTFY_PUBLISHER_PASSWORD"]
 NTFY_TOPIC = os.environ.get("NTFY_DIAGNOSIS_TOPIC", "pf-alerts-diagnosis")
 MAX_BODY_BYTES = 1_000_000
-# Hard ceiling on investigations per rolling hour. Not a cost concern (this is
-# all local now) but the RX 580 is a single shared, already-contended GPU -
-# this stops an alert storm (many namespaces firing at once, each its own
-# Alertmanager group) from queuing up a pile of concurrent tool-use loops.
+# Ceiling on investigations/hour - protects the single shared GPU from an alert storm, not a cost concern.
 MAX_INVESTIGATIONS_PER_HOUR = int(os.environ.get("MAX_INVESTIGATIONS_PER_HOUR", "10"))
+
+# Kill switch for Claude escalation (argocd/apps/mcp-gateway/values.yaml) - off until Anthropic billing exists.
+CLAUDE_ESCALATION_ENABLED = os.environ.get("CLAUDE_ESCALATION_ENABLED", "false").lower() == "true"
+
+# Separate kill switch + budget for the live "ask Claude directly" /ask/escalate path - user-triggered (a button
+# click), read-only, never drafts a PR, so a different risk/cost profile from CLAUDE_ESCALATION_ENABLED above.
+CLAUDE_ASK_ENABLED = os.environ.get("CLAUDE_ASK_ENABLED", "false").lower() == "true"
+MAX_CLAUDE_ASK_PER_HOUR = int(os.environ.get("MAX_CLAUDE_ASK_PER_HOUR", "10"))
+SUPPORTED_INTENTS_MESSAGE = (
+    "I can only answer questions about a specific pod's health, a specific "
+    "Kubernetes node/host's memory or CPU, a specific PersistentVolumeClaim's "
+    "space, a specific Argo CD Application's sync status, a specific Deployment/"
+    "DaemonSet/StatefulSet/Job/PodDisruptionBudget's health, a specific Proxmox "
+    "host's status, what Grafana dashboard covers a topic, or how many/which "
+    "nodes/namespaces/pods/PVCs/Deployments/DaemonSets/StatefulSets/Jobs/"
+    "PodDisruptionBudgets/Argo CD Applications/Proxmox hosts exist - and I "
+    "need the actual name for a specific-resource question, not a vague one."
+)
+
+# Sentinels meaning the pipeline couldn't reach a confident answer - triggers maybe_escalate_to_claude() below.
+LOW_CONFIDENCE_SENTINELS = (
+    "Investigation did not conclude within the tool-call budget.",
+    "(model returned no diagnosis text)",
+    "INSUFFICIENT_EVIDENCE:",
+    "(model response was truncated before completing a real answer",
+    "(ran out of context budget partway through the investigation",
+    SUPPORTED_INTENTS_MESSAGE,
+)
 
 _warmup_done = threading.Event()
 _investigation_times = []
 _budget_lock = threading.Lock()
+_claude_ask_times = []
+_claude_ask_budget_lock = threading.Lock()
 
 
 def budget_available():
@@ -71,6 +97,17 @@ def budget_available():
         return True
 
 
+def claude_ask_budget_available():
+    now = time.monotonic()
+    with _claude_ask_budget_lock:
+        global _claude_ask_times
+        _claude_ask_times = [t for t in _claude_ask_times if now - t < 3600]
+        if len(_claude_ask_times) >= MAX_CLAUDE_ASK_PER_HOUR:
+            return False
+        _claude_ask_times.append(now)
+        return True
+
+
 def build_alert_text(payload):
     alerts = payload.get("alerts") or []
     lines = []
@@ -80,16 +117,7 @@ def build_alert_text(payload):
         name = labels.get("alertname", "alert")
         summary = ann.get("summary") or ann.get("description") or ""
         severity = labels.get("severity")
-        # Only alertname/summary/severity, not the full label dump: labels
-        # like container/instance/job/pod/service/endpoint usually identify
-        # the *scrape target that produced the metric* (e.g. kube-state-metrics'
-        # own pod), not the resource the alert is actually about - live testing
-        # showed the model conflating "container=kube-state-metrics" from a
-        # KubeDeploymentReplicasMismatch alert with the actual Deployment being
-        # investigated, claiming it had a "kube-state-metrics container". Each
-        # playbook's evidence already restates the real target's name/namespace/
-        # kind in its own section headers, so the raw labels add noise here, not
-        # signal.
+        # Only alertname/summary/severity - raw labels are the scrape target, not the actual resource, and confuse the model.
         lines.append(f"{name}: {summary}" + (f" (severity={severity})" if severity else ""))
     return "\n".join(lines) or "(no alert details)"
 
@@ -102,23 +130,51 @@ def triage(alert_text):
     return verdict.startswith("ESCALATE")
 
 
-SUPPORTED_INTENTS_MESSAGE = (
-    "I can only answer questions about a specific pod's health, a specific "
-    "node/host's memory or CPU, a specific PersistentVolumeClaim's space, a "
-    "specific Argo CD Application's sync status, or a specific Deployment/"
-    "DaemonSet/StatefulSet/Job/PodDisruptionBudget's health - and I need the "
-    "actual name, not a general question."
-)
+async def fetch_proxmox_hosts():
+    """Live Proxmox host list for the classifier, fetched fresh each time - never hardcoded, best-effort."""
+    try:
+        async with streamablehttp_client(PROXMOX_MCP_URL) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                text = await call_tool_text(session, "list_nodes", {})
+                return [n["name"] for n in json.loads(text) if n.get("name")]
+    except Exception:  # noqa: BLE001 - grounding is optional, never fatal to classification
+        return []
 
 
-def classify_intent(question):
-    """Ask llama.cpp to map a question to one of the known playbook shapes,
-    constrained to a fixed JSON schema. Never trust the model's own claim
-    that it filled every required field - build_target() re-validates with
-    plain truthiness checks, since live testing showed the model sometimes
-    returning e.g. {"intent": "pod", "namespace": "", "name": ""} instead of
-    honestly returning {"intent": null} when it couldn't confidently answer."""
-    prompt = load_prompt("intent_classify.txt", question=question)
+async def fetch_k8s_nodes():
+    """Live Kubernetes node list for the classifier, fetched fresh each time - symmetric with fetch_proxmox_hosts()."""
+    try:
+        async with streamablehttp_client(K8S_MCP_URL) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                text = await call_tool_text(
+                    session, "resources_list", {"apiVersion": "v1", "kind": "Node"}, max_chars=None
+                )
+        return [parts[2] for line in text.splitlines()[1:] if len(parts := line.split()) > 2]
+    except Exception:  # noqa: BLE001 - grounding is optional, never fatal to classification
+        return []
+
+
+def classify_intent(question, proxmox_hosts, k8s_nodes):
+    """Ask llama.cpp to classify the question; build_target() re-validates required fields, never trusts it blindly."""
+    proxmox_hosts_hint = (
+        f"The bare-metal Proxmox hosts that currently exist in this cluster are: "
+        f"{', '.join(proxmox_hosts)}."
+        if proxmox_hosts
+        else ""
+    )
+    k8s_nodes_hint = (
+        f"The Kubernetes nodes that currently exist in this cluster are: {', '.join(k8s_nodes)}."
+        if k8s_nodes
+        else ""
+    )
+    prompt = load_prompt(
+        "intent_classify.txt",
+        question=question,
+        proxmox_hosts_hint=proxmox_hosts_hint,
+        k8s_nodes_hint=k8s_nodes_hint,
+    )
     message = chat_completion([{"role": "user", "content": prompt}], max_tokens=200)
     content = (message.get("content") or "").strip()
     if content.startswith("```"):
@@ -132,17 +188,13 @@ def classify_intent(question):
 
 
 def build_target(intent_data):
-    """Turn a classify_intent() result into (playbook_module, target) for
-    investigate.run_direct(), or (None, None) if the intent is unsupported
-    or missing a required field - required fields are re-checked here with
-    plain truthiness, not just presence, deliberately not trusting the
-    model's own judgment that it filled them in correctly."""
+    """Turn classify_intent()'s result into (playbook, target), or (None, None); re-checks required fields itself."""
     intent = intent_data.get("intent")
 
     if intent == "pod":
         namespace, name = intent_data.get("namespace"), intent_data.get("name")
-        if namespace and name:
-            return pod, {"namespace": namespace, "pod": name}
+        if name:
+            return pod, {"namespace": namespace or None, "pod": name}
 
     elif intent == "host":
         name = intent_data.get("name")
@@ -155,9 +207,10 @@ def build_target(intent_data):
             return argocd, {"name": name}
 
     elif intent == "pvc":
+        # namespace optional, like "pod" - pvc.py resolves it live when omitted.
         namespace, name = intent_data.get("namespace"), intent_data.get("name")
-        if namespace and name:
-            return pvc, {"namespace": namespace, "pvc": name}
+        if name:
+            return pvc, {"namespace": namespace or None, "pvc": name}
 
     elif intent == "workload":
         namespace, name, kind = intent_data.get("namespace"), intent_data.get("name"), intent_data.get("kind")
@@ -165,18 +218,75 @@ def build_target(intent_data):
         if namespace and name and api_version:
             return workload, {"namespace": namespace, "name": name, "apiVersion": api_version, "kind": kind}
 
+    elif intent == "proxmox":
+        # Host validity is checked live inside proxmox.py's investigate(), not here.
+        node = intent_data.get("node")
+        if node:
+            return proxmox, {"node": node}
+
+    elif intent == "list":
+        resource = intent_data.get("resource")
+        if resource in list_resource.K8S_RESOURCES or resource == "proxmox_hosts":
+            return list_resource, {"resource": resource}
+
+    elif intent == "grafana":
+        query = intent_data.get("query")
+        if query:
+            return grafana, {"query": query}
+
     return None, None
 
 
+async def fetch_classifier_hints():
+    """Fetch both live lists concurrently - one event loop instead of two."""
+    return await asyncio.gather(fetch_proxmox_hosts(), fetch_k8s_nodes())
+
+
 def handle_ask(question):
-    intent_data = classify_intent(question)
+    proxmox_hosts, k8s_nodes = asyncio.run(fetch_classifier_hints())
+    intent_data = classify_intent(question, proxmox_hosts, k8s_nodes)
     module, target = build_target(intent_data)
+    alert_text = f"(user question, not an alert): {question}"
     if not module:
+        # No intent matched - escalate in the background so the caller isn't delayed by it.
+        threading.Thread(
+            target=maybe_escalate_to_claude, args=("ask", alert_text, SUPPORTED_INTENTS_MESSAGE, None), daemon=True
+        ).start()
         return SUPPORTED_INTENTS_MESSAGE
     if not budget_available():
         return f"Hourly investigation budget ({MAX_INVESTIGATIONS_PER_HOUR}) is exhausted right now - try again later."
-    alert_text = f"(user question, not an alert): {question}"
-    return asyncio.run(run_direct(module, alert_text, target))
+    answer = asyncio.run(run_direct(module, alert_text, target))
+    target_file = f"bridge/mcp-gateway/playbooks/{module.NAME}.py"
+    threading.Thread(target=maybe_escalate_to_claude, args=("ask", alert_text, answer, target_file), daemon=True).start()
+    return answer
+
+
+async def run_claude_ask(question):
+    """Opens the same read-only MCP sessions the local agentic fallback uses, then hands the question to claude_ask.py."""
+    async with streamablehttp_client(K8S_MCP_URL) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            async with contextlib.AsyncExitStack() as stack:
+                sessions = [session]
+                for url in (GRAFANA_MCP_URL, PROXMOX_MCP_URL):
+                    extra = await open_optional_session(stack, url)
+                    if extra is not None:
+                        sessions.append(extra)
+                return await claude_ask.investigate(sessions, question)
+
+
+def handle_ask_escalate(question):
+    if not CLAUDE_ASK_ENABLED:
+        return "Asking Claude directly isn't enabled right now."
+    if not claude_ask_budget_available():
+        return f"Hourly Claude-question budget ({MAX_CLAUDE_ASK_PER_HOUR}) is exhausted right now - try again later."
+    try:
+        return asyncio.run(run_claude_ask(question))
+    except Exception as exc:  # noqa: BLE001 - surfaced to the caller, not just stdout
+        import traceback
+
+        traceback.print_exc()
+        return f"Something went wrong asking Claude: {exc!r}"
 
 
 def publish_ntfy(title, message):
@@ -199,6 +309,35 @@ def publish_ntfy(title, message):
         resp.read()
 
 
+def maybe_escalate_to_claude(alertname, alert_text, diagnosis, target_file):
+    """If the local diagnosis was low-confidence, submit a Workflow asking Claude to propose a playbook-fix PR; gated by CLAUDE_ESCALATION_ENABLED."""
+    if not CLAUDE_ESCALATION_ENABLED:
+        return
+    if not any(sentinel in diagnosis for sentinel in LOW_CONFIDENCE_SENTINELS):
+        return
+    try:
+        print("stage: claude escalation - submitting workflow")
+        result = submit_workflow(
+            "claude-improve-playbook",
+            "argo-workflows",
+            {
+                "alertname": alertname,
+                "alert_text": alert_text,
+                "diagnosis": diagnosis,
+                "target_file": target_file or "",
+            },
+        )
+        workflow_name = result.get("metadata", {}).get("name", "?")
+        print(f"stage: claude escalation - submitted {workflow_name}")
+        publish_ntfy(
+            f"Claude escalation: {alertname}",
+            f"Local diagnosis was low-confidence - {workflow_name} is drafting a playbook "
+            f"improvement PR for review.",
+        )
+    except Exception as exc:  # noqa: BLE001 - escalation failing must never affect the alert path above
+        print(f"stage: claude escalation failed: {exc!r}")
+
+
 def handle_alert(payload):
     alert_text = build_alert_text(payload)
     alertname = payload.get("commonLabels", {}).get("alertname") or "alert"
@@ -215,10 +354,11 @@ def handle_alert(payload):
             )
             return
         diagnosis = None
+        target_file = None
         for attempt in range(2):
             try:
                 print(f"stage: investigate attempt {attempt}")
-                diagnosis = asyncio.run(run_investigation(alert_text, payload))
+                diagnosis, target_file = asyncio.run(run_investigation(alert_text, payload))
                 print("stage: investigate done")
                 break
             except OSError as exc:
@@ -229,6 +369,7 @@ def handle_alert(payload):
         print("stage: publish_ntfy start")
         publish_ntfy("Diagnosis: " + alertname, diagnosis)
         print("stage: publish_ntfy done")
+        maybe_escalate_to_claude(alertname, alert_text, diagnosis, target_file)
     except Exception as exc:  # noqa: BLE001 - this runs off the request thread, only stdout can see it
         import traceback
 
@@ -238,7 +379,7 @@ def handle_alert(payload):
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path not in ("/investigate", "/ask"):
+        if self.path not in ("/investigate", "/ask", "/ask/escalate"):
             self.send_response(404)
             self.end_headers()
             return
@@ -263,17 +404,18 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        if self.path == "/ask":
-            # Synchronous, unlike /investigate: there's no webhook timeout to
-            # race, and the caller (a chat UI) wants the answer in the
-            # response body, not delivered later via ntfy.
+        if self.path in ("/ask", "/ask/escalate"):
+            # Synchronous, unlike /investigate - the caller wants the answer in the response body, not via ntfy.
             question = (payload.get("question") or "").strip()
             if not question:
                 self.send_response(400)
                 self.end_headers()
                 return
             try:
-                answer = handle_ask(question)
+                if self.path == "/ask/escalate":
+                    answer = handle_ask_escalate(question)
+                else:
+                    answer = handle_ask(question)
             except Exception as exc:  # noqa: BLE001 - surfaced to the caller, not just stdout
                 import traceback
 
@@ -287,8 +429,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(response)
             return
 
-        # Ack Alertmanager immediately - investigation can take well past its webhook
-        # timeout, the diagnosis is delivered later via ntfy instead of in this response.
+        # Ack Alertmanager immediately; diagnosis is delivered later via ntfy.
         self.send_response(200)
         self.end_headers()
         threading.Thread(target=handle_alert, args=(payload,), daemon=True).start()
@@ -303,9 +444,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
         if self.path == "/healthz":
-            # Liveness: process is up and serving. Separate from readiness -
-            # never gate this on warm_up(), or a slow warm-up trips the
-            # liveness probe's failure threshold and crash-loops the pod.
+            # Liveness only - never gated on warm_up(), or a slow warm-up trips the restart threshold.
             self.send_response(200)
             self.end_headers()
             return
@@ -321,12 +460,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def warm_up():
-    """The first cross-node connection from a freshly-started pod to llamacpp
-    (mcp-gateway runs on k3s-worker, llamacpp on k3s-gpu) has been observed to
-    fail with ECONNREFUSED for 30+ seconds - neither pod's own readiness probe
-    exercises that specific node-to-node path, since kubelet always probes
-    locally. Pay that cold-start cost here at boot instead of on the first
-    real alert."""
+    """First cross-node call to llamacpp can take 30s+ cold; pay that cost at boot, not on the first real alert."""
     try:
         req = urllib.request.Request(LLAMACPP_URL + "/health")
         urlopen_with_retry(req, timeout=10, attempts=8)

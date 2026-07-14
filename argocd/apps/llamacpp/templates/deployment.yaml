@@ -31,6 +31,11 @@ spec:
             - "8080"
             - "--n-gpu-layers"
             - "{{ .Values.gpuLayers }}"
+            # OpenAI-style tool-calling support (Qwen2.5's chat template
+            # handles tool_call/tool_result natively under --jinja).
+            - "--jinja"
+            - "--ctx-size"
+            - "8192"
           env:
             - name: LLAMA_CACHE
               value: /models

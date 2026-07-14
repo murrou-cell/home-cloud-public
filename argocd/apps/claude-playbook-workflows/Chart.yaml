@@ -1,0 +1,4 @@
+apiVersion: v2
+name: claude-playbook-workflows
+version: 1.0.0
+type: application

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cluster Assistant</title>
 <style>
   :root { color-scheme: light dark; }
@@ -32,39 +33,73 @@
     cursor: pointer;
   }
   button:disabled { opacity: 0.5; cursor: default; }
-  #answer {
-    white-space: pre-wrap;
-    padding: 1rem;
-    border-radius: 0.4rem;
-    background: #80808018;
-    min-height: 2rem;
-  }
   .examples { font-size: 0.85rem; opacity: 0.7; margin-top: 0.5rem; }
+  .example-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  #history { margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+  .entry { padding: 1rem; border-radius: 0.4rem; background: #80808018; }
+  .entry .q { font-weight: 600; margin-bottom: 0.5rem; }
+  .entry .a { white-space: pre-wrap; }
+  .entry .a.pending { opacity: 0.7; }
+  .escalate-btn {
+    margin-top: 0.75rem;
+    background: none;
+    border: 1px solid #8888;
+    color: inherit;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+    border-radius: 0.4rem;
+    cursor: pointer;
+  }
+  .claude-answer {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed #8888;
+    white-space: pre-wrap;
+  }
+  .claude-answer .label { font-weight: 600; font-size: 0.8rem; opacity: 0.7; margin-bottom: 0.3rem; }
 </style>
 </head>
 <body>
   <h1>Cluster Assistant</h1>
   <p class="hint">
-    Ask about a specific pod, node/host, PVC, Argo CD Application, or
-    Deployment/DaemonSet/StatefulSet/Job/PodDisruptionBudget - by name.
-    Answers are grounded in live evidence fetched from the cluster, not
-    invented by the model.
+    Ask about a specific pod, node, PVC, Argo CD app, workload, or Proxmox
+    host by name - or how many of any of those exist, or what Grafana
+    dashboard covers a topic.
   </p>
   <form id="ask-form">
-    <input id="question" type="text" placeholder="why is loki crashlooping in monitoring?" autocomplete="off" />
+    <input id="question" type="text" placeholder="why is billing-api crashlooping?" autocomplete="off" />
     <button id="submit" type="submit">Ask</button>
   </form>
-  <div id="answer"></div>
   <p class="examples">
-    Examples: "is k3s-worker healthy?" &middot; "is storage-loki-stack-0 pvc full?"
-    &middot; "why is the root argocd app degraded?"
+    Examples:
+    <button class="example-btn" type="button">is worker-2 healthy?</button> &middot;
+    <button class="example-btn" type="button">is user-data-cache pvc full?</button> &middot;
+    <button class="example-btn" type="button">why is the auth-service argocd app degraded?</button> &middot;
+    <button class="example-btn" type="button">how many nodes do we have?</button> &middot;
+    <button class="example-btn" type="button">what dashboard covers redis?</button>
   </p>
+  <div id="history"></div>
 
 <script>
 const form = document.getElementById("ask-form");
 const input = document.getElementById("question");
 const button = document.getElementById("submit");
-const answer = document.getElementById("answer");
+const history = document.getElementById("history");
+
+document.querySelectorAll(".example-btn").forEach((el) => {
+  el.addEventListener("click", () => {
+    input.value = el.textContent;
+    input.focus();
+  });
+});
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -72,7 +107,24 @@ form.addEventListener("submit", async (e) => {
   if (!question) return;
 
   button.disabled = true;
-  answer.textContent = "Thinking... (this can take up to ~30s)";
+  input.value = "";
+
+  const entry = document.createElement("div");
+  entry.className = "entry";
+  const qEl = document.createElement("div");
+  qEl.className = "q";
+  qEl.textContent = question;
+  const aEl = document.createElement("div");
+  aEl.className = "a pending";
+  entry.append(qEl, aEl);
+  history.prepend(entry);
+
+  const startedAt = Date.now();
+  const tick = () => {
+    aEl.textContent = `Thinking... ${Math.floor((Date.now() - startedAt) / 1000)}s`;
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
 
   try {
     const resp = await fetch("/ask", {
@@ -81,17 +133,67 @@ form.addEventListener("submit", async (e) => {
       body: JSON.stringify({ question }),
     });
     if (!resp.ok) {
-      answer.textContent = `Request failed (${resp.status}).`;
+      aEl.textContent = `Request failed (${resp.status}).`;
       return;
     }
     const data = await resp.json();
-    answer.textContent = data.answer;
+    aEl.textContent = data.answer;
+    addEscalateButton(entry, question);
   } catch (err) {
-    answer.textContent = "Request failed: " + err;
+    aEl.textContent = "Request failed: " + err;
   } finally {
+    clearInterval(timer);
+    aEl.classList.remove("pending");
     button.disabled = false;
   }
 });
+
+function addEscalateButton(entry, question) {
+  const escalateBtn = document.createElement("button");
+  escalateBtn.className = "escalate-btn";
+  escalateBtn.type = "button";
+  escalateBtn.textContent = "Not satisfied? Ask Claude";
+  entry.appendChild(escalateBtn);
+
+  escalateBtn.addEventListener("click", async () => {
+    escalateBtn.disabled = true;
+
+    const claudeEl = document.createElement("div");
+    claudeEl.className = "claude-answer";
+    const label = document.createElement("div");
+    label.className = "label";
+    label.textContent = "Claude's answer:";
+    const body = document.createElement("div");
+    entry.insertBefore(claudeEl, escalateBtn);
+    claudeEl.append(label, body);
+
+    const startedAt = Date.now();
+    const tick = () => {
+      body.textContent = `Asking Claude... ${Math.floor((Date.now() - startedAt) / 1000)}s`;
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+
+    try {
+      const resp = await fetch("/ask/escalate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
+      if (!resp.ok) {
+        body.textContent = `Request failed (${resp.status}).`;
+        return;
+      }
+      const data = await resp.json();
+      body.textContent = data.answer;
+    } catch (err) {
+      body.textContent = "Request failed: " + err;
+    } finally {
+      clearInterval(timer);
+      escalateBtn.remove();
+    }
+  });
+}
 </script>
 </body>
 </html>

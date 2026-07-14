@@ -1,11 +1,4 @@
-"""Deterministic evidence-gathering for Argo CD application health alerts
-(ArgoCDAppDegraded, ArgoCDAppNotSynced). These carry `name` (the Application
-CR's own name) + `exported_namespace`/`dest_namespace` (what it deploys to,
-not where the Application object lives - that's always `argocd`) - a
-different identifying shape from pod/host/pvc/workload alerts. The single
-best evidence source is the Application CR itself: its `status` already
-carries sync/health state, the operation history, and a per-managed-resource
-breakdown, which is exactly what a human would open the Argo CD UI to see."""
+"""Deterministic evidence-gathering for Argo CD app alerts; Application CRs' namespace is resolved live (resolve_app_namespace), never assumed, even though this cluster currently puts them all in "argocd"."""
 from common import call_tool_text, chat_completion, load_prompt
 
 NAME = "argocd"
@@ -20,14 +13,30 @@ def extract_target(payload):
     return None
 
 
+async def resolve_app_namespace(session, name):
+    """Lists Applications across every namespace and reads the real NAMESPACE column for the matching name, instead of assuming one."""
+    listing = await call_tool_text(
+        session, "resources_list", {"apiVersion": "argoproj.io/v1alpha1", "kind": "Application"}, max_chars=None
+    )
+    for line in listing.splitlines()[1:]:
+        parts = line.split()
+        if len(parts) >= 4 and parts[3] == name:
+            return parts[0]
+    return None
+
+
 async def investigate(session, alert_text, target):
     name = target["name"]
 
+    namespace = await resolve_app_namespace(session, name)
+    if not namespace:
+        return f"No Argo CD Application named '{name}' found in the cluster."
+
     app_status = await call_tool_text(
-        session, "resources_get", {"apiVersion": "argoproj.io/v1alpha1", "kind": "Application", "name": name, "namespace": "argocd"}
+        session, "resources_get", {"apiVersion": "argoproj.io/v1alpha1", "kind": "Application", "name": name, "namespace": namespace}
     )
     events = await call_tool_text(
-        session, "events_list", {"namespace": "argocd", "fieldSelector": f"involvedObject.name={name}"}
+        session, "events_list", {"namespace": namespace, "fieldSelector": f"involvedObject.name={name}"}
     )
 
     evidence = (

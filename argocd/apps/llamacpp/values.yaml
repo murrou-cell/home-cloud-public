@@ -12,16 +12,28 @@ nodeSelector:
 resources:
   requests:
     cpu: 250m
-    memory: 512Mi
+    memory: 768Mi
   limits:
-    memory: 2Gi
+    memory: 4Gi
 
+# Qwen3-4B-Instruct-2507, not Qwen2.5-7B: a 7B Q4_K_M (~4.68GB weights alone)
+# doesn't fit this card's 4GB VRAM at all. This 4B-class 2507 refresh is
+# Qwen's own documented "state-of-the-art tool use among models of similar
+# size" release - same vendor/template family as the 3B model it replaces
+# (low --jinja/tool-schema compatibility risk), non-thinking mode (no
+# reasoning-token overhead eating into the 8192-token context budget), and
+# ~2.5GB weights still leaves comfortable VRAM headroom for KV cache.
+# unsloth's mirror, not the official Qwen/Qwen3-4B-Instruct-2507-GGUF repo -
+# that one 401s (gated), and this cluster has no HF_TOKEN configured.
 model:
-  hfRepo: Qwen/Qwen2.5-0.5B-Instruct-GGUF
-  hfFile: qwen2.5-0.5b-instruct-q4_k_m.gguf
+  hfRepo: unsloth/Qwen3-4B-Instruct-2507-GGUF
+  hfFile: Qwen3-4B-Instruct-2507-Q4_K_M.gguf
 
 gpuLayers: 999
 
+# Bumped 4Gi -> 8Gi: the new ~2.5GB model needs to download alongside the
+# old ~2.0GB Qwen2.5-3B cache (kept as a rollback fallback, not deleted) -
+# 4Gi left no room for both at once.
 persistence:
-  size: 2Gi
+  size: 8Gi
   storageClass: longhorn

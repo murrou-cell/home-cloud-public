@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp-gateway-tailscale
+  namespace: {{ .Release.Namespace }}
+  # No tailscale.com/funnel annotation, deliberately - unlike ntfy/Atlantis/
+  # Grafana, this fronts a tool-using LLM with real read access to the
+  # cluster/Proxmox/Grafana via MCP, so it's tailnet-only (reachable by
+  # devices actually joined to the tailnet) rather than public-internet
+  # Funnel, even though it's still gated by the same Dex/GitHub SSO either way.
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: oauth2-proxy-mcp-gateway
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - cluster-assistant

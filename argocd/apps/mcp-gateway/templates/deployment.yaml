@@ -13,6 +13,7 @@ spec:
       labels:
         app: mcp-gateway
     spec:
+      serviceAccountName: mcp-gateway
       nodeSelector:
         {{- toYaml .Values.nodeSelector | nindent 8 }}
       imagePullSecrets:
@@ -38,6 +39,21 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.ntfyCredentialsSecret }}
                   key: publisherpassword
+            - name: CLAUDE_ESCALATION_ENABLED
+              value: {{ .Values.claudeEscalation.enabled | quote }}
+            - name: MAX_INVESTIGATIONS_PER_HOUR
+              value: {{ .Values.maxInvestigationsPerHour | quote }}
+            - name: CLAUDE_ASK_ENABLED
+              value: {{ .Values.claudeAsk.enabled | quote }}
+            - name: CLAUDE_ASK_MODEL
+              value: {{ .Values.claudeAsk.model | quote }}
+            - name: MAX_CLAUDE_ASK_PER_HOUR
+              value: {{ .Values.claudeAsk.maxPerHour | quote }}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.claudeAsk.credentialsSecret }}
+                  key: anthropic-api-key
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:

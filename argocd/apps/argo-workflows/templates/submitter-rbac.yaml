@@ -46,3 +46,19 @@ subjects:
 - kind: ServiceAccount
   name: atlantis
   namespace: atlantis
+---
+# Same pattern, for mcp-gateway's Claude-escalation dispatch
+# (common.py's submit_workflow, gated by CLAUDE_ESCALATION_ENABLED).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-submitter-mcp-gateway
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-submitter
+subjects:
+- kind: ServiceAccount
+  name: mcp-gateway
+  namespace: ntfy

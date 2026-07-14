@@ -17,3 +17,19 @@ resources:
 # authenticates to ntfy as the same write-only publisher user the
 # alertmanager-ntfy-bridge already uses.
 ntfyCredentialsSecret: ntfy-credentials
+
+# Hard ceiling on investigations (alerts + /ask questions) per rolling hour - protects the shared RX 580 GPU, not a cost concern.
+maxInvestigationsPerHour: 30
+
+claudeEscalation:
+  # Kill switch for the Claude-escalation Workflow (see gateway.py's maybe_escalate_to_claude); now live - secret exists in Bitwarden.
+  enabled: true
+
+claudeAsk:
+  # Kill switch for the live "ask Claude directly" /ask/escalate path (see gateway.py's handle_ask_escalate) - user-triggered, read-only, never drafts a PR.
+  enabled: true
+  # Interactive/latency-sensitive and potentially higher-frequency than the low-volume playbook-PR path, so Sonnet rather than Opus.
+  model: claude-sonnet-5
+  # Separate hourly cap from maxInvestigationsPerHour - this one costs real money per call.
+  maxPerHour: 10
+  credentialsSecret: claude-ask-secret

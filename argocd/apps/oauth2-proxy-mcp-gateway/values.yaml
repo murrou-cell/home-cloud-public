@@ -1,0 +1,39 @@
+oauth2-proxy:
+  fullnameOverride: oauth2-proxy-mcp-gateway
+
+  config:
+    # client-id injected via templates/secret.yaml (bitwarden can't create hyphenated keys).
+    # client-secret and cookie-secret are managed by bitwarden-vault in the same secret.
+    existingSecret: oauth2-proxy-mcp-gateway-secret
+
+  extraArgs:
+    provider: oidc
+    # Same issuer/alias pattern as Atlantis/Argo Workflows: discover via
+    # internal HTTP, skip issuer mismatch check (Dex stamps the external
+    # Tailscale URL in the doc).
+    oidc-issuer-url: "http://argocd-server.argocd.svc.cluster.local/api/dex"
+    insecure-oidc-skip-issuer-verification: "true"
+    ssl-insecure-skip-verify: "true"
+    upstream: "http://mcp-gateway:8080"
+    redirect-url: "https://cluster-assistant.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback"
+    email-domain: "*"
+    # No skip-auth-route needed here, unlike Atlantis (/events, GitHub
+    # webhooks) or ntfy (native mobile app clients) - /ask and the static
+    # chat UI are purely human-browser use cases. Alertmanager never reaches
+    # /investigate through this path at all; it POSTs directly to the
+    # in-cluster mcp-gateway Service, which this Ingress/proxy doesn't sit
+    # in front of.
+
+  # Disable built-in ingress — custom Tailscale Funnel ingress in templates/
+  ingress:
+    enabled: false
+
+  nodeSelector:
+    kubernetes.io/hostname: k3s-worker
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi

@@ -40,6 +40,11 @@ argo-cd:
           secret: $dex.ntfy.clientSecret
           redirectURIs:
           - https://ntfy.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback
+        - id: mcp-gateway-oauth2-proxy
+          name: mcp-gateway
+          secret: $dex.mcp-gateway.clientSecret
+          redirectURIs:
+          - https://cluster-assistant.<YOUR_TAILSCALE_DOMAIN>.ts.net/oauth2/callback
     rbac:
       policy.default: role:readonly
       policy.csv: |

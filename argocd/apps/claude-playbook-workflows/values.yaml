@@ -1,0 +1,18 @@
+image:
+  # Built by .github/workflows/claude-playbook-agent.yml on push to main.
+  repository: ghcr.io/murrou-cell/claude-playbook-agent
+  tag: latest
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+# Bitwarden item: bitwarden-vault/argo-workflows/claude-escalation-secrets
+# (keys: github-token, anthropic-api-key). Deliberately a new, narrowly-
+# scoped credential pair - not a reuse of Atlantis's github-token, which
+# has a different (broader, PR-comment-only) purpose and lives in a
+# different namespace's secret.
+credentialsSecret: claude-escalation-secrets

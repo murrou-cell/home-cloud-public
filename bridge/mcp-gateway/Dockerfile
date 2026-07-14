@@ -6,7 +6,7 @@ FROM python:3.13-slim@sha256:eb43ff125d8d58d7449dcba7d336c23bcac412f526d861db493
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir --no-compile -r requirements.txt
-COPY gateway.py common.py investigate.py agentic.py ./
+COPY gateway.py common.py investigate.py agentic.py claude_ask.py ./
 COPY playbooks/ ./playbooks/
 COPY prompts/ ./prompts/
 COPY static/ ./static/

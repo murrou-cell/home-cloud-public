@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: claude-improve-playbook
+  namespace: {{ .Release.Namespace }}
+spec:
+  entrypoint: propose
+  serviceAccountName: argo-workflow
+  imagePullSecrets:
+    - name: ghcr-pull-secret
+  ttlStrategy:
+    secondsAfterCompletion: 604800
+  arguments:
+    parameters:
+    - name: alertname
+      value: "alert"
+    - name: alert_text
+      value: ""
+    - name: diagnosis
+      value: ""
+    - name: target_file
+      value: ""
+  templates:
+  - name: propose
+    inputs:
+      parameters:
+      - name: alertname
+      - name: alert_text
+      - name: diagnosis
+      - name: target_file
+    container:
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      # Explicit command so Argo's emissary executor never needs to inspect the private image's entrypoint (which needs secret-read RBAC it doesn't have).
+      command: ["python3", "agent.py"]
+      env:
+      - name: ALERTNAME
+        value: "{{ "{{inputs.parameters.alertname}}" }}"
+      - name: ALERT_TEXT
+        value: "{{ "{{inputs.parameters.alert_text}}" }}"
+      - name: DIAGNOSIS
+        value: "{{ "{{inputs.parameters.diagnosis}}" }}"
+      - name: TARGET_FILE
+        value: "{{ "{{inputs.parameters.target_file}}" }}"
+      - name: WORKFLOW_NAME
+        value: "{{ "{{workflow.name}}" }}"
+      - name: GITHUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Values.credentialsSecret }}
+            key: github-token
+      - name: ANTHROPIC_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Values.credentialsSecret }}
+            key: anthropic-api-key
+      resources:
+        {{- toYaml .Values.resources | nindent 8 }}
