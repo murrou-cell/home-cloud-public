@@ -6,6 +6,11 @@ metadata:
 spec:
   entrypoint: propose
   serviceAccountName: argo-workflow
+  # Stable label on every pod this WorkflowTemplate spawns, regardless of the generated workflow
+  # name - lets NetworkPolicies (this app's own, and the MCP servers' ingress rules) select it.
+  podMetadata:
+    labels:
+      app: claude-playbook-agent
   imagePullSecrets:
     - name: ghcr-pull-secret
   ttlStrategy:

@@ -47,6 +47,17 @@ spec:
           # alone isn't enough, EPERM persists even as root without this.
           securityContext:
             privileged: true
+          # Liveness/readiness don't start counting until this first succeeds - without it, a
+          # 4B-parameter model loading into 4GB VRAM can easily take longer than the ~55s
+          # (10s + 3x15s) liveness previously allowed, killing the container mid-load and
+          # restart-looping indefinitely (observed: 12 restarts over 37h).
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /health

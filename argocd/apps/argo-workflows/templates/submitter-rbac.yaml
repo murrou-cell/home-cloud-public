@@ -12,7 +12,9 @@ metadata:
 rules:
 - apiGroups: [argoproj.io]
   resources: [workflows]
-  verbs: [create]
+  # get/watch lets mcp-gateway poll a submitted Workflow's own phase to notify on a non-Succeeded
+  # outcome (see gateway.py's poll_workflow_phase) - read-only, not scoped to only what you created.
+  verbs: [create, get, watch]
 - apiGroups: [argoproj.io]
   resources: [workflowtemplates]
   verbs: [get, list]

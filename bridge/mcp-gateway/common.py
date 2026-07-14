@@ -73,6 +73,22 @@ def submit_workflow(template_name, namespace, parameters):
         return json.loads(resp.read())
 
 
+def get_workflow_phase(name, namespace):
+    """GET a Workflow's current .status.phase via this pod's own ServiceAccount token, the same mechanism submit_workflow() uses to create it. Returns None on any error (not yet observable, RBAC missing, network blip) rather than raising - this is a best-effort status check, not a critical path."""
+    token = Path("/var/run/secrets/kubernetes.io/serviceaccount/token").read_text().strip()
+    req = urllib.request.Request(
+        f"https://kubernetes.default.svc/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{name}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    context = ssl.create_default_context(cafile="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+    try:
+        with urlopen_with_retry(req, timeout=15, attempts=2, context=context) as resp:
+            data = json.loads(resp.read())
+    except Exception:  # noqa: BLE001 - best-effort status check, never blocks the escalation path itself
+        return None
+    return data.get("status", {}).get("phase")
+
+
 def chat_completion(messages, tools=None, max_tokens=1024, temperature=0):
     """Call llama.cpp's OpenAI-compatible endpoint, return the response message dict."""
     body = {

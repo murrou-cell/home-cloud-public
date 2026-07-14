@@ -102,8 +102,10 @@ async def investigate(session, alert_text, target):
         )
         return await diagnose(alert_text, evidence)
 
+    # max_chars=None - a real Node object is well over the default 2000-char cap (observed
+    # ~12.8KB), which was cutting off conditions/allocatable/taints before the model ever saw them.
     node_status = await call_tool_text(
-        session, "resources_get", {"apiVersion": "v1", "kind": "Node", "name": node_name}
+        session, "resources_get", {"apiVersion": "v1", "kind": "Node", "name": node_name}, max_chars=None
     )
     # Real KiB values invite the same unit-conversion hallucination as per-pod stats; compute GiB deterministically instead.
     memory_summary = extract_node_memory_summary(node_status)

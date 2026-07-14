@@ -22,6 +22,7 @@ from common import (
     PROXMOX_MCP_URL,
     call_tool_text,
     chat_completion,
+    get_workflow_phase,
     load_prompt,
     submit_workflow,
     urlopen_with_retry,
@@ -33,6 +34,9 @@ from investigate import open_optional_session
 from investigate import run as run_investigation
 from investigate import run_direct
 from playbooks import argocd, grafana, host, list_resource, pod, proxmox, pvc, workload
+from playbooks import networkpolicy
+from playbooks import longhorn_setting
+from playbooks import cronjob
 
 # kind -> apiVersion for the "workload" /ask intent; separate from playbooks/__init__.py's alert-shape dispatch.
 WORKLOAD_KIND_API_VERSIONS = {
@@ -234,6 +238,22 @@ def build_target(intent_data):
         if query:
             return grafana, {"query": query}
 
+    elif intent == "cronjob":
+        # namespace optional, like "pvc" - cronjob.py resolves it live when omitted.
+        namespace, name = intent_data.get("namespace"), intent_data.get("name")
+        if name:
+            return cronjob, {"namespace": namespace or None, "cronjob": name}
+
+    elif intent == "longhorn_setting":
+        name = intent_data.get("name")
+        if name:
+            return longhorn_setting, {"name": name}
+
+    elif intent == "networkpolicy":
+        namespace, name = intent_data.get("namespace"), intent_data.get("name")
+        if namespace and name:
+            return networkpolicy, {"namespace": namespace, "name": name}
+
     return None, None
 
 
@@ -309,6 +329,24 @@ def publish_ntfy(title, message):
         resp.read()
 
 
+# Real escalation runs observed so far complete in well under a minute; this ceiling just bounds
+# how long the background thread waits before giving up on watching, not how long Claude gets.
+CLAUDE_ESCALATION_POLL_TIMEOUT = 240
+CLAUDE_ESCALATION_POLL_INTERVAL = 8
+
+
+def poll_workflow_phase(namespace, name):
+    """Blocks until the Workflow reaches a terminal phase or the timeout elapses - safe to block since this always runs off a background thread, never the request-handling one."""
+    deadline = time.monotonic() + CLAUDE_ESCALATION_POLL_TIMEOUT
+    phase = None
+    while time.monotonic() < deadline:
+        phase = get_workflow_phase(name, namespace)
+        if phase in ("Succeeded", "Failed", "Error"):
+            return phase
+        time.sleep(CLAUDE_ESCALATION_POLL_INTERVAL)
+    return phase
+
+
 def maybe_escalate_to_claude(alertname, alert_text, diagnosis, target_file):
     """If the local diagnosis was low-confidence, submit a Workflow asking Claude to propose a playbook-fix PR; gated by CLAUDE_ESCALATION_ENABLED."""
     if not CLAUDE_ESCALATION_ENABLED:
@@ -334,6 +372,15 @@ def maybe_escalate_to_claude(alertname, alert_text, diagnosis, target_file):
             f"Local diagnosis was low-confidence - {workflow_name} is drafting a playbook "
             f"improvement PR for review.",
         )
+        # Without this, a validation failure that makes agent.py give up (no PR opened) was
+        # invisible except by manually checking Workflow logs - this closes that gap.
+        phase = poll_workflow_phase("argo-workflows", workflow_name)
+        if phase != "Succeeded":
+            publish_ntfy(
+                f"Claude escalation gave up: {alertname}",
+                f"{workflow_name} ended as {phase or 'unknown (timed out watching)'} without opening a "
+                f"PR - check `kubectl logs -n argo-workflows {workflow_name}` for why.",
+            )
     except Exception as exc:  # noqa: BLE001 - escalation failing must never affect the alert path above
         print(f"stage: claude escalation failed: {exc!r}")
 

@@ -91,8 +91,13 @@ async def investigate(session, alert_text, target):
     pods_section = ""
     label_selector = extract_label_selector(controller_status)
     if label_selector:
+        # A table listing has no "status:" marker for truncate_keeping_status to prioritize, so just
+        # raise the flat cap instead - a listing across several pods was observed at ~9.8KB.
         pods = await call_tool_text(
-            session, "resources_list", {"apiVersion": "v1", "kind": "Pod", "namespace": namespace, "labelSelector": label_selector}
+            session,
+            "resources_list",
+            {"apiVersion": "v1", "kind": "Pod", "namespace": namespace, "labelSelector": label_selector},
+            max_chars=MAX_TOOL_RESULT_CHARS * 3,
         )
         pods_section = f"--- pods under this {kind} (resources_list Pod, labelSelector={label_selector}) ---\n{pods}\n\n"
 
